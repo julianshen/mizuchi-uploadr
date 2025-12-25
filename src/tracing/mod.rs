@@ -36,6 +36,7 @@
 
 pub mod init;
 pub mod propagation;
+pub mod sampling;
 pub mod subscriber;
 
 pub use init::{init_tracing, shutdown_tracing, TracingGuard};
