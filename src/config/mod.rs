@@ -2,6 +2,7 @@
 //!
 //! Handles loading and parsing of YAML configuration files.
 
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
@@ -9,6 +10,31 @@ use thiserror::Error;
 mod loader;
 
 pub use loader::ConfigLoader;
+
+/// Expand environment variables in a string
+/// Supports ${VAR_NAME} syntax
+fn expand_env_vars(s: &str) -> String {
+    let mut result = s.to_string();
+    let re = regex_lite::Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)\}").unwrap();
+
+    for cap in re.captures_iter(s) {
+        let var_name = &cap[1];
+        if let Ok(value) = std::env::var(var_name) {
+            result = result.replace(&format!("${{{}}}", var_name), &value);
+        }
+    }
+
+    result
+}
+
+/// Custom deserializer for strings with environment variable expansion
+fn deserialize_with_env<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(expand_env_vars(&s))
+}
 
 /// Configuration errors
 #[derive(Error, Debug)]
@@ -30,6 +56,8 @@ pub struct Config {
     pub buckets: Vec<BucketConfig>,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    #[serde(default)]
+    pub tracing: Option<TracingConfig>,
 }
 
 impl Config {
@@ -52,6 +80,20 @@ impl Config {
                     "Bucket '{}' has empty path_prefix",
                     bucket.name
                 )));
+            }
+        }
+
+        // Validate tracing config if present
+        if let Some(ref tracing) = self.tracing {
+            if tracing.enabled {
+                // Validate OTLP endpoint URL
+                if !tracing.otlp.endpoint.starts_with("http://")
+                    && !tracing.otlp.endpoint.starts_with("https://")
+                {
+                    return Err(ConfigError::ValidationError(
+                        "Invalid OTLP endpoint: must start with http:// or https://".into(),
+                    ));
+                }
             }
         }
 
@@ -218,6 +260,112 @@ fn default_metrics_port() -> u16 {
     9090
 }
 
+/// Tracing configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TracingConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(deserialize_with = "deserialize_with_env")]
+    pub service_name: String,
+    #[serde(default)]
+    pub otlp: OtlpConfig,
+    #[serde(default)]
+    pub sampling: SamplingConfig,
+    #[serde(default)]
+    pub batch: BatchConfig,
+}
+
+/// OTLP exporter configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpConfig {
+    #[serde(deserialize_with = "deserialize_with_env")]
+    pub endpoint: String,
+    #[serde(default = "default_otlp_protocol")]
+    pub protocol: String,
+    #[serde(default = "default_otlp_timeout")]
+    pub timeout_seconds: u64,
+    #[serde(default)]
+    pub compression: Option<String>,
+}
+
+impl Default for OtlpConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: String::new(),
+            protocol: default_otlp_protocol(),
+            timeout_seconds: default_otlp_timeout(),
+            compression: None,
+        }
+    }
+}
+
+fn default_otlp_protocol() -> String {
+    "grpc".to_string()
+}
+
+fn default_otlp_timeout() -> u64 {
+    10
+}
+
+/// Sampling configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamplingConfig {
+    #[serde(default = "default_sampling_strategy")]
+    pub strategy: String,
+    #[serde(default = "default_sampling_ratio")]
+    pub ratio: f64,
+}
+
+impl Default for SamplingConfig {
+    fn default() -> Self {
+        Self {
+            strategy: default_sampling_strategy(),
+            ratio: default_sampling_ratio(),
+        }
+    }
+}
+
+fn default_sampling_strategy() -> String {
+    "always".to_string()
+}
+
+fn default_sampling_ratio() -> f64 {
+    1.0
+}
+
+/// Batch span processor configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchConfig {
+    #[serde(default = "default_max_queue_size")]
+    pub max_queue_size: usize,
+    #[serde(default = "default_scheduled_delay")]
+    pub scheduled_delay_millis: u64,
+    #[serde(default = "default_max_export_batch_size")]
+    pub max_export_batch_size: usize,
+}
+
+impl Default for BatchConfig {
+    fn default() -> Self {
+        Self {
+            max_queue_size: default_max_queue_size(),
+            scheduled_delay_millis: default_scheduled_delay(),
+            max_export_batch_size: default_max_export_batch_size(),
+        }
+    }
+}
+
+fn default_max_queue_size() -> usize {
+    2048
+}
+
+fn default_scheduled_delay() -> u64 {
+    5000
+}
+
+fn default_max_export_batch_size() -> usize {
+    512
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +386,7 @@ mod tests {
             },
             buckets: vec![],
             metrics: MetricsConfig::default(),
+            tracing: None,
         };
 
         assert!(config.validate().is_err());
