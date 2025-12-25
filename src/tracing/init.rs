@@ -5,7 +5,8 @@
 
 use crate::config::TracingConfig;
 use opentelemetry::global;
-use opentelemetry_sdk::trace::TracerProvider;
+use opentelemetry_sdk::trace::{Sampler, TracerProvider};
+use opentelemetry_sdk::Resource;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -121,9 +122,34 @@ pub fn init_tracing(config: &TracingConfig) -> Result<TracingGuard, TracingError
         )));
     }
 
-    // For now, create a minimal tracer provider
-    // Full OTLP integration will be added in the next iteration
-    let provider = TracerProvider::builder().build();
+    // Configure sampling strategy
+    let sampler = match config.sampling.strategy.as_str() {
+        "always" => Sampler::AlwaysOn,
+        "never" => Sampler::AlwaysOff,
+        "ratio" => Sampler::TraceIdRatioBased(config.sampling.ratio),
+        "parent_based" => {
+            Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(config.sampling.ratio)))
+        }
+        _ => Sampler::AlwaysOn, // Default to always on
+    };
+
+    // Create resource with service name
+    let resource = Resource::new(vec![opentelemetry::KeyValue::new(
+        "service.name",
+        config.service_name.clone(),
+    )]);
+
+    // Build tracer provider with configured sampler and resource
+    // TODO: Add OTLP exporter integration (requires Tokio runtime context)
+    // For now, we create a basic provider that validates configuration
+    // and sets up the sampling/resource correctly
+    let provider = TracerProvider::builder()
+        .with_config(
+            opentelemetry_sdk::trace::config()
+                .with_sampler(sampler)
+                .with_resource(resource),
+        )
+        .build();
 
     // Set as global provider
     global::set_tracer_provider(provider.clone());
