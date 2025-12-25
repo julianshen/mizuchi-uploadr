@@ -3,6 +3,7 @@
 //! Handles loading and parsing of YAML configuration files with support for
 //! environment variable expansion and comprehensive validation.
 
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
@@ -35,12 +36,16 @@ pub use loader::ConfigLoader;
 /// assert_eq!(result, "default");
 /// ```
 fn expand_env_vars(s: &str) -> String {
-    // Regex to capture ${VAR} or ${VAR:-default}
-    let re = regex_lite::Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]+))?\}").unwrap();
+    // Compile regex once using lazy_static for better performance
+    lazy_static! {
+        static ref ENV_VAR_RE: regex_lite::Regex =
+            regex_lite::Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]+))?\}").unwrap();
+    }
+
     let mut last_match = 0;
     let mut result = String::with_capacity(s.len());
 
-    for cap in re.captures_iter(s) {
+    for cap in ENV_VAR_RE.captures_iter(s) {
         let full_match = cap.get(0).unwrap();
         let var_name = cap.get(1).unwrap().as_str();
 
@@ -141,7 +146,14 @@ impl Config {
         // Validate tracing config if present
         if let Some(ref tracing) = self.tracing {
             if tracing.enabled {
-                // Validate OTLP endpoint URL
+                // Validate OTLP endpoint is not empty
+                if tracing.otlp.endpoint.is_empty() {
+                    return Err(ConfigError::ValidationError(
+                        "OTLP endpoint cannot be empty when tracing is enabled".into(),
+                    ));
+                }
+
+                // Validate OTLP endpoint URL format
                 if !is_valid_http_url(&tracing.otlp.endpoint) {
                     return Err(ConfigError::ValidationError(
                         "Invalid OTLP endpoint: must start with http:// or https://".into(),
@@ -437,7 +449,8 @@ fn default_service_name() -> String {
 pub struct OtlpConfig {
     /// OTLP collector endpoint URL. Supports ${VAR} expansion.
     /// Must start with http:// or https://
-    #[serde(deserialize_with = "deserialize_with_env")]
+    /// Default: "" (empty, must be provided when tracing is enabled)
+    #[serde(default, deserialize_with = "deserialize_with_env")]
     pub endpoint: String,
 
     /// Protocol to use: "grpc" or "http/protobuf". Default: "grpc"
