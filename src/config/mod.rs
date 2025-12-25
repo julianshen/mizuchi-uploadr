@@ -17,8 +17,12 @@ pub use loader::ConfigLoader;
 
 /// Expand environment variables in a string.
 ///
-/// Supports `${VAR_NAME}` syntax where VAR_NAME must start with a letter or
-/// underscore and contain only uppercase letters, digits, and underscores.
+/// Supports two syntaxes:
+/// - `${VAR_NAME}` - Simple expansion, keeps placeholder if var not found
+/// - `${VAR_NAME:-default}` - Expansion with default value
+///
+/// Variable names must start with a letter or underscore and contain only
+/// uppercase letters, digits, and underscores.
 ///
 /// # Examples
 ///
@@ -26,17 +30,42 @@ pub use loader::ConfigLoader;
 /// std::env::set_var("MY_VAR", "value");
 /// let result = expand_env_vars("prefix-${MY_VAR}-suffix");
 /// assert_eq!(result, "prefix-value-suffix");
+///
+/// let result = expand_env_vars("${MISSING:-default}");
+/// assert_eq!(result, "default");
 /// ```
 fn expand_env_vars(s: &str) -> String {
-    let mut result = s.to_string();
-    let re = regex_lite::Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)\}").unwrap();
+    // Regex to capture ${VAR} or ${VAR:-default}
+    let re = regex_lite::Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]+))?\}").unwrap();
+    let mut last_match = 0;
+    let mut result = String::with_capacity(s.len());
 
     for cap in re.captures_iter(s) {
-        let var_name = &cap[1];
-        if let Ok(value) = std::env::var(var_name) {
-            result = result.replace(&format!("${{{}}}", var_name), &value);
-        }
+        let full_match = cap.get(0).unwrap();
+        let var_name = cap.get(1).unwrap().as_str();
+
+        // Append the text before the match
+        result.push_str(&s[last_match..full_match.start()]);
+
+        // Get value from env, or use default from regex
+        let value = match std::env::var(var_name) {
+            Ok(val) => val,
+            Err(_) => {
+                if let Some(default) = cap.get(2) {
+                    default.as_str().to_string()
+                } else {
+                    // No env var and no default. Keep the original placeholder.
+                    full_match.as_str().to_string()
+                }
+            }
+        };
+        result.push_str(&value);
+
+        last_match = full_match.end();
     }
+
+    // Append the rest of the string after the last match
+    result.push_str(&s[last_match..]);
 
     result
 }
@@ -111,10 +140,63 @@ impl Config {
 
         // Validate tracing config if present
         if let Some(ref tracing) = self.tracing {
-            if tracing.enabled && !is_valid_http_url(&tracing.otlp.endpoint) {
-                return Err(ConfigError::ValidationError(
-                    "Invalid OTLP endpoint: must start with http:// or https://".into(),
-                ));
+            if tracing.enabled {
+                // Validate OTLP endpoint URL
+                if !is_valid_http_url(&tracing.otlp.endpoint) {
+                    return Err(ConfigError::ValidationError(
+                        "Invalid OTLP endpoint: must start with http:// or https://".into(),
+                    ));
+                }
+
+                // Validate service name is not empty
+                if tracing.service_name.trim().is_empty() {
+                    return Err(ConfigError::ValidationError(
+                        "Service name cannot be empty when tracing is enabled".into(),
+                    ));
+                }
+
+                // Validate OTLP protocol
+                match tracing.otlp.protocol.as_str() {
+                    "grpc" | "http/protobuf" => {}
+                    _ => {
+                        return Err(ConfigError::ValidationError(format!(
+                            "Invalid OTLP protocol '{}': must be 'grpc' or 'http/protobuf'",
+                            tracing.otlp.protocol
+                        )))
+                    }
+                }
+
+                // Validate compression if specified
+                if let Some(ref compression) = tracing.otlp.compression {
+                    match compression.as_str() {
+                        "gzip" | "none" => {}
+                        _ => {
+                            return Err(ConfigError::ValidationError(format!(
+                                "Invalid compression '{}': must be 'gzip' or 'none'",
+                                compression
+                            )))
+                        }
+                    }
+                }
+
+                // Validate sampling ratio
+                if tracing.sampling.ratio < 0.0 || tracing.sampling.ratio > 1.0 {
+                    return Err(ConfigError::ValidationError(format!(
+                        "Invalid sampling ratio {}: must be between 0.0 and 1.0",
+                        tracing.sampling.ratio
+                    )));
+                }
+
+                // Validate sampling strategy
+                match tracing.sampling.strategy.as_str() {
+                    "always" | "never" | "ratio" | "parent_based" => {}
+                    _ => {
+                        return Err(ConfigError::ValidationError(format!(
+                            "Invalid sampling strategy '{}': must be 'always', 'never', 'ratio', or 'parent_based'",
+                            tracing.sampling.strategy
+                        )))
+                    }
+                }
             }
         }
 
@@ -309,8 +391,12 @@ pub struct TracingConfig {
     #[serde(default)]
     pub enabled: bool,
 
-    /// Service name for trace identification. Supports ${VAR} expansion.
-    #[serde(deserialize_with = "deserialize_with_env")]
+    /// Service name for trace identification. Supports ${VAR} and ${VAR:-default} expansion.
+    /// Default: "mizuchi-uploadr"
+    #[serde(
+        default = "default_service_name",
+        deserialize_with = "deserialize_with_env"
+    )]
     pub service_name: String,
 
     /// OTLP exporter configuration
@@ -324,6 +410,10 @@ pub struct TracingConfig {
     /// Batch span processor configuration
     #[serde(default)]
     pub batch: BatchConfig,
+}
+
+fn default_service_name() -> String {
+    "mizuchi-uploadr".to_string()
 }
 
 /// OTLP (OpenTelemetry Protocol) exporter configuration.

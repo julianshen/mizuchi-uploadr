@@ -3,7 +3,8 @@
 //! This test suite validates the tracing configuration parsing,
 //! validation, and default values following TDD methodology.
 
-use mizuchi_uploadr::config::{Config, TracingConfig};
+use mizuchi_uploadr::config::Config;
+use serial_test::serial;
 
 #[test]
 fn test_parse_tracing_config_from_yaml() {
@@ -147,8 +148,10 @@ tracing:
 }
 
 #[test]
+#[serial]
 fn test_environment_variable_expansion() {
     // Test environment variable expansion in config values
+    // Note: This test uses #[serial] to avoid race conditions with parallel test execution
     std::env::set_var("OTLP_ENDPOINT", "http://jaeger:4317");
     std::env::set_var("SERVICE_NAME", "test-service");
 
@@ -182,4 +185,97 @@ tracing:
     // Cleanup
     std::env::remove_var("OTLP_ENDPOINT");
     std::env::remove_var("SERVICE_NAME");
+}
+
+#[test]
+#[serial]
+fn test_environment_variable_with_defaults() {
+    // Test ${VAR:-default} syntax
+    // Ensure the variable is NOT set
+    std::env::remove_var("MISSING_VAR");
+
+    let yaml = r#"
+server:
+  address: "0.0.0.0:8080"
+
+buckets:
+  - name: "test-bucket"
+    path_prefix: "/uploads"
+    s3:
+      bucket: "my-s3-bucket"
+      region: "us-east-1"
+
+tracing:
+  enabled: true
+  service_name: "${MISSING_VAR:-default-service}"
+  otlp:
+    endpoint: "http://localhost:4317"
+"#;
+
+    let config: Config = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+
+    assert!(config.tracing.is_some());
+    let tracing = config.tracing.unwrap();
+
+    // Default value should be used when env var is missing
+    assert_eq!(tracing.service_name, "default-service");
+}
+
+#[test]
+fn test_validate_sampling_ratio() {
+    // Test that invalid sampling ratio is rejected
+    let yaml = r#"
+server:
+  address: "0.0.0.0:8080"
+
+buckets:
+  - name: "test-bucket"
+    path_prefix: "/uploads"
+    s3:
+      bucket: "my-s3-bucket"
+      region: "us-east-1"
+
+tracing:
+  enabled: true
+  service_name: "mizuchi-uploadr"
+  otlp:
+    endpoint: "http://localhost:4317"
+  sampling:
+    ratio: 1.5
+"#;
+
+    let config: Config = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+
+    let result = config.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("sampling ratio"));
+}
+
+#[test]
+fn test_validate_invalid_protocol() {
+    // Test that invalid protocol is rejected
+    let yaml = r#"
+server:
+  address: "0.0.0.0:8080"
+
+buckets:
+  - name: "test-bucket"
+    path_prefix: "/uploads"
+    s3:
+      bucket: "my-s3-bucket"
+      region: "us-east-1"
+
+tracing:
+  enabled: true
+  service_name: "mizuchi-uploadr"
+  otlp:
+    endpoint: "http://localhost:4317"
+    protocol: "invalid"
+"#;
+
+    let config: Config = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+
+    let result = config.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("protocol"));
 }
