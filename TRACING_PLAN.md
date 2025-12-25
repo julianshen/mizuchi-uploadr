@@ -11,20 +11,28 @@
 **One PR per Phase/Feature** - Each PR contains complete Red-Green-Refactor cycle:
 
 - ✅ **Phase 1** (PR #4): Configuration Infrastructure - COMPLETE
-- 🚧 **Phase 2** (PR #5): OpenTelemetry Integration - IN PROGRESS
-- ⏳ **Phase 3** (PR #6): Span Instrumentation - NOT STARTED
-- ⏳ **Phase 4** (PR #7): Advanced Features - NOT STARTED
-- ⏳ **Phase 5** (PR #8): Production Readiness - NOT STARTED
+- ✅ **Phase 2** (PRs #5-16): OpenTelemetry Integration - COMPLETE
+- ✅ **Phase 3** (PR #13): Span Instrumentation - COMPLETE
+- 🚧 **Phase 4** (PR #17+): Advanced Features - IN PROGRESS
+- ⏳ **Phase 5**: Production Readiness - NOT STARTED
 
 ### Progress Tracking
 
-| Phase                | Status         | PR  | Tests       | Files     |
-| -------------------- | -------------- | --- | ----------- | --------- |
-| 1. Configuration     | ✅ Complete    | #4  | 8/8 passing | 3 files   |
-| 2. OTel Integration  | 🚧 In Progress | #5  | 0/10        | 0/6 files |
-| 3. Instrumentation   | ⏳ Not Started | #6  | 0/15        | 0/7 files |
-| 4. Advanced Features | ⏳ Not Started | #7  | 0/12        | 0/9 files |
-| 5. Production Ready  | ⏳ Not Started | #8  | 0/8         | 0/7 files |
+| Phase                | Status         | PRs   | Tests       | Files     |
+| -------------------- | -------------- | ----- | ----------- | --------- |
+| 1. Configuration     | ✅ Complete    | #4    | 8/8 passing | 3 files   |
+| 2. OTel Integration  | ✅ Complete    | #5-16 | All passing | 15+ files |
+| 3. Instrumentation   | ✅ Complete    | #13   | All passing | 5+ files  |
+| 4. Advanced Features | 🚧 In Progress | #17   | 5/5 passing | 2 files   |
+| 5. Production Ready  | ⏳ Not Started | -     | 0/8         | 0/7 files |
+
+### Recent Completions
+
+- ✅ **PR #17** (2025-12-25): W3C Trace Context Injection for S3 - MERGED
+  - Added `inject_trace_context()` to S3Client
+  - All S3 operations now inject traceparent header
+  - 5 new integration tests passing
+  - Complete TDD cycle (RED-GREEN-REFACTOR)
 
 ---
 
@@ -50,13 +58,23 @@
 - Trace sampling strategies
 - Integration with Pingora server
 
+### ✅ Recently Completed
+
+- **W3C Trace Context Injection** (PR #17) - S3 operations now inject traceparent headers
+- **HTTP Span Instrumentation** (PR #13) - HTTP requests create spans with semantic conventions
+- **Advanced Sampling** (PR #11) - Configurable sampling strategies
+- **Performance Optimization** (PR #12) - Optimized trace context propagation
+
+### 🚧 In Progress
+
+- W3C Trace Context Extraction - Extract traceparent from incoming requests
+- Auth/AuthZ Tracing - Add tracing to authentication and authorization
+
 ### ❌ Not Started
 
-- Distributed trace context propagation (W3C Trace Context)
-- Custom span attributes for S3 operations
 - Trace correlation with metrics
-- Performance impact measurement
-- Production-ready tracing configuration
+- Production-ready error handling
+- Comprehensive documentation and examples
 
 ---
 
@@ -410,67 +428,192 @@ span.set_attribute("upload.zero_copy", true);
 
 ---
 
-## Phase 4: Advanced Features ⏳ NOT STARTED
+## Phase 4: Advanced Features 🚧 IN PROGRESS
 
 **Goal**: Add trace context propagation, auth tracing, and performance optimization
 
-**PR Strategy**: Single PR with complete Red-Green-Refactor cycle
+**PR Strategy**: Multiple PRs for different features
+
+### 4.1 W3C Trace Context Injection for S3 ✅ COMPLETE
+
+**Status**: ✅ Merged in PR #17
+
+**TDD Workflow** (Complete Red-Green-Refactor cycle):
+
+1. 🔴 **RED**: Write failing tests for S3 trace context injection
+
+   - Test: `test_put_object_injects_traceparent_header` - Verifies traceparent header exists
+   - Test: `test_put_object_injects_valid_traceparent_format` - Verifies W3C format
+   - Test: `test_create_multipart_upload_injects_traceparent` - Verifies multipart init
+   - Test: `test_upload_part_injects_traceparent` - Verifies part upload
+   - Test: `test_complete_multipart_upload_injects_traceparent` - Verifies multipart complete
+
+2. 🟢 **GREEN**: Implement traceparent injection
+
+   - Added `inject_trace_context()` helper method to S3Client
+   - Generates traceparent header with W3C format
+   - Uses timestamp-based trace ID and span ID generation
+   - Injects traceparent into all S3 operations:
+     - `put_object()` - PUT requests
+     - `create_multipart_upload()` - POST with ?uploads
+     - `upload_part()` - PUT with partNumber/uploadId
+     - `complete_multipart_upload()` - POST with uploadId
+
+3. 🔵 **REFACTOR**: Update documentation
+
+   - Updated feature list to highlight W3C Trace Context support
+   - Added W3C Trace Context Propagation section with examples
+   - Documented traceparent header format and example
+   - Updated implementation notes to reflect current state
+   - Clarified TODO for OpenTelemetry span extraction
+
+**Files Created/Modified**:
+
+- ✅ `src/s3/mod.rs` - Added `inject_trace_context()` and updated all S3 operations
+- ✅ `tests/s3_trace_context_test.rs` - New integration tests for trace context
+
+**W3C Trace Context Format**:
+
+```
+traceparent: 00-{trace-id}-{span-id}-{flags}
+Example: 00-0000000000000000000001234567890a-0000000012345678-01
+```
+
+**Acceptance Criteria**:
+
+- [x] Context propagated to S3 API calls
+- [x] All 5 W3C Trace Context tests passing
+- [x] All 20 existing tests still passing
+- [x] Comprehensive documentation with examples
+- [x] No breaking changes
+
+**Implementation Notes**:
+
+- **Current**: Uses timestamp-based trace ID/span ID generation
+- **TODO**: Extract actual trace context from current OpenTelemetry span
+- **Future**: Integrate with OpenTelemetry context propagation
+
+**PR**: #17 - W3C Trace Context Injection for S3 (complete TDD cycle)
+
+---
+
+### 4.2 W3C Trace Context Extraction ⏳ NOT STARTED
+
+**Goal**: Extract trace context from incoming HTTP requests
 
 **TDD Workflow**:
 
 1. 🔴 **RED**: Write failing tests
 
-   - W3C Trace Context propagation tests
-   - Auth/authz tracing tests
-   - Performance impact tests
+   - W3C Trace Context extraction tests
+   - Trace context propagation tests
+   - Invalid traceparent handling tests
 
 2. 🟢 **GREEN**: Implement features
 
    - Extract `traceparent` and `tracestate` headers
-   - Inject context into S3 requests
-   - Add spans to JWT/SigV4 validators
-   - Add spans to authz clients
+   - Parse W3C Trace Context format
+   - Create span context from extracted headers
    - Link spans correctly
 
 3. 🔵 **REFACTOR**: Optimize and secure
 
-   - Reduce tracing overhead
-   - Ensure no PII in span attributes
-   - Add security-relevant attributes
-   - Performance tuning
+   - Reduce parsing overhead
+   - Add validation for trace context
+   - Improve error handling
 
 **Files to Create/Modify**:
 
-- `src/tracing/propagation.rs` (new) - W3C Trace Context
-- `src/auth/jwt.rs` (modify) - Add tracing
-- `src/auth/sigv4.rs` (modify) - Add tracing
-- `src/authz/opa/mod.rs` (modify) - Add tracing
-- `src/authz/openfga/mod.rs` (modify) - Add tracing
-- `src/s3/mod.rs` (modify) - Inject trace context
-- `tests/propagation_test.rs` (new) - Propagation tests
-- `tests/auth_tracing_test.rs` (new) - Auth tracing tests
-- `benches/tracing_benchmark.rs` (new) - Performance benchmarks
-
-**W3C Trace Context Headers**:
-
-```
-traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
-tracestate: congo=t61rcWkgMzE
-```
+- `src/tracing/propagation.rs` (new) - W3C Trace Context extraction
+- `src/server/tracing_middleware.rs` (modify) - Extract context from headers
+- `tests/context_propagation_test.rs` (modify) - Extraction tests
 
 **Acceptance Criteria**:
 
 - [ ] Trace context extracted from incoming requests
-- [ ] Context propagated to S3 API calls
 - [ ] Distributed traces work end-to-end
+- [ ] Invalid trace context handled gracefully
+- [ ] All tests pass: `cargo test --lib`
+
+**PR**: TBD - W3C Trace Context Extraction
+
+---
+
+### 4.3 Auth/AuthZ Tracing ⏳ NOT STARTED
+
+**Goal**: Add tracing to authentication and authorization operations
+
+**TDD Workflow**:
+
+1. 🔴 **RED**: Write failing tests
+
+   - Auth/authz tracing tests
+   - Ensure no PII in span attributes
+
+2. 🟢 **GREEN**: Implement features
+
+   - Add spans to JWT/SigV4 validators
+   - Add spans to authz clients
+   - Add security-relevant attributes
+
+3. 🔵 **REFACTOR**: Optimize and secure
+
+   - Ensure no PII in span attributes
+   - Add security-relevant attributes
+
+**Files to Create/Modify**:
+
+- `src/auth/jwt.rs` (modify) - Add tracing
+- `src/auth/sigv4.rs` (modify) - Add tracing
+- `src/authz/opa/mod.rs` (modify) - Add tracing
+- `src/authz/openfga/mod.rs` (modify) - Add tracing
+- `tests/auth_tracing_test.rs` (new) - Auth tracing tests
+
+**Acceptance Criteria**:
+
 - [ ] Auth operations traced (no PII)
 - [ ] Authorization decisions logged
+- [ ] All tests pass: `cargo test --lib`
+
+**PR**: TBD - Auth/AuthZ Tracing
+
+---
+
+### 4.4 Performance Optimization ⏳ NOT STARTED
+
+**Goal**: Optimize tracing performance and measure overhead
+
+**TDD Workflow**:
+
+1. 🔴 **RED**: Write failing tests
+
+   - Performance impact tests
+   - Benchmarks for tracing overhead
+
+2. 🟢 **GREEN**: Implement optimizations
+
+   - Reduce tracing overhead
+   - Optimize span creation
+   - Tune batch export settings
+
+3. 🔵 **REFACTOR**: Performance tuning
+
+   - Profile and optimize hot paths
+   - Reduce allocations
+   - Optimize attribute recording
+
+**Files to Create/Modify**:
+
+- `benches/tracing_benchmark.rs` (new) - Performance benchmarks
+- `src/tracing/init.rs` (modify) - Optimize initialization
+
+**Acceptance Criteria**:
+
 - [ ] Sampling strategies configurable
 - [ ] Performance overhead < 5%
-- [ ] All tests pass: `cargo test --lib`
 - [ ] Benchmarks show acceptable overhead
 
-**PR**: #7 - Advanced Tracing Features (complete TDD cycle)
+**PR**: TBD - Tracing Performance Optimization
 
 ---
 
