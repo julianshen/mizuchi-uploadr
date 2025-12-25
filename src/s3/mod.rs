@@ -90,8 +90,8 @@
 //!
 //! - **No SigV4 signing yet**: Currently sends unsigned requests (works with MinIO in dev mode)
 //! - **No W3C trace context**: Trace context injection is TODO
-//! - **Hardcoded key in upload_part**: Uses "test-key" - will be fixed when integrated with upload module
 //! - **Simple XML parsing**: Uses basic string matching - consider using quick-xml for complex responses
+//! - **Key parameter**: All multipart operations now accept key parameter for flexible object naming
 
 use bytes::Bytes;
 use thiserror::Error;
