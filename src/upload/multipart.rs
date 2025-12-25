@@ -51,15 +51,26 @@ impl MultipartHandler {
     }
 
     /// Initiate a multipart upload
+    #[tracing::instrument(
+        name = "upload.multipart.create",
+        skip(self),
+        fields(
+            s3.bucket = %bucket,
+            s3.key = %key,
+            upload_id = tracing::field::Empty
+        ),
+        err
+    )]
     pub async fn create(&self, bucket: &str, key: &str) -> Result<MultipartUpload, UploadError> {
         // TODO: Implement actual S3 CreateMultipartUpload
         // This is a placeholder for TDD
 
         let upload_id = uuid::Uuid::new_v4().to_string();
 
+        // Record upload_id in span
+        tracing::Span::current().record("upload_id", &upload_id.as_str());
+
         tracing::info!(
-            bucket = bucket,
-            key = key,
             upload_id = %upload_id,
             "Created multipart upload"
         );
@@ -73,6 +84,17 @@ impl MultipartHandler {
     }
 
     /// Upload a part
+    #[tracing::instrument(
+        name = "upload.multipart.upload_part",
+        skip(self, upload, body),
+        fields(
+            upload_id = %upload.upload_id,
+            part_number = part_number,
+            upload.bytes = body.len(),
+            s3.etag = tracing::field::Empty
+        ),
+        err
+    )]
     pub async fn upload_part(
         &self,
         upload: &mut MultipartUpload,
@@ -98,9 +120,11 @@ impl MultipartHandler {
 
         upload.parts.push(part.clone());
 
+        // Record etag in span
+        tracing::Span::current().record("s3.etag", &part.etag.as_str());
+
         tracing::info!(
-            upload_id = %upload.upload_id,
-            part_number = part_number,
+            etag = %part.etag,
             size = body.len(),
             "Uploaded part"
         );
@@ -109,6 +133,16 @@ impl MultipartHandler {
     }
 
     /// Complete a multipart upload
+    #[tracing::instrument(
+        name = "upload.multipart.complete",
+        skip(self, upload),
+        fields(
+            upload_id = %upload.upload_id,
+            parts_count = upload.parts.len(),
+            s3.etag = tracing::field::Empty
+        ),
+        err
+    )]
     pub async fn complete(&self, upload: &MultipartUpload) -> Result<UploadResult, UploadError> {
         if upload.parts.is_empty() {
             return Err(UploadError::MultipartError("No parts uploaded".into()));
@@ -116,17 +150,22 @@ impl MultipartHandler {
 
         // TODO: Implement actual S3 CompleteMultipartUpload
 
+        let result = UploadResult {
+            etag: format!("\"{}-{}\"", uuid::Uuid::new_v4(), upload.parts.len()),
+            version_id: None,
+            bytes_written: 0, // Would sum part sizes in real impl
+        };
+
+        // Record etag in span
+        tracing::Span::current().record("s3.etag", &result.etag.as_str());
+
         tracing::info!(
-            upload_id = %upload.upload_id,
+            etag = %result.etag,
             parts = upload.parts.len(),
             "Completed multipart upload"
         );
 
-        Ok(UploadResult {
-            etag: format!("\"{}-{}\"", uuid::Uuid::new_v4(), upload.parts.len()),
-            version_id: None,
-            bytes_written: 0, // Would sum part sizes in real impl
-        })
+        Ok(result)
     }
 
     /// Abort a multipart upload

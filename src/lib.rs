@@ -33,6 +33,9 @@ pub mod s3;
 pub mod server;
 pub mod upload;
 
+#[cfg(feature = "tracing")]
+pub mod tracing;
+
 // Re-export commonly used types
 pub use config::Config;
 pub use server::Server;

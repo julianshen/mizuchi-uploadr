@@ -152,6 +152,11 @@ tracing:
 fn test_environment_variable_expansion() {
     // Test environment variable expansion in config values
     // Note: This test uses #[serial] to avoid race conditions with parallel test execution
+
+    // Preserve existing env vars to avoid clobbering
+    let old_endpoint = std::env::var("OTLP_ENDPOINT").ok();
+    let old_service_name = std::env::var("SERVICE_NAME").ok();
+
     std::env::set_var("OTLP_ENDPOINT", "http://jaeger:4317");
     std::env::set_var("SERVICE_NAME", "test-service");
 
@@ -182,16 +187,23 @@ tracing:
     assert_eq!(tracing.service_name, "test-service");
     assert_eq!(tracing.otlp.endpoint, "http://jaeger:4317");
 
-    // Cleanup
-    std::env::remove_var("OTLP_ENDPOINT");
-    std::env::remove_var("SERVICE_NAME");
+    // Restore original env vars to avoid cross-test interference
+    match old_endpoint {
+        Some(val) => std::env::set_var("OTLP_ENDPOINT", val),
+        None => std::env::remove_var("OTLP_ENDPOINT"),
+    }
+    match old_service_name {
+        Some(val) => std::env::set_var("SERVICE_NAME", val),
+        None => std::env::remove_var("SERVICE_NAME"),
+    }
 }
 
 #[test]
 #[serial]
 fn test_environment_variable_with_defaults() {
     // Test ${VAR:-default} syntax
-    // Ensure the variable is NOT set
+    // Preserve and ensure the variable is NOT set
+    let old_missing_var = std::env::var("MISSING_VAR").ok();
     std::env::remove_var("MISSING_VAR");
 
     let yaml = r#"
@@ -219,6 +231,11 @@ tracing:
 
     // Default value should be used when env var is missing
     assert_eq!(tracing.service_name, "default-service");
+
+    // Restore original env var
+    if let Some(val) = old_missing_var {
+        std::env::set_var("MISSING_VAR", val);
+    }
 }
 
 #[test]

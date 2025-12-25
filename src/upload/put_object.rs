@@ -27,6 +27,20 @@ impl PutObjectHandler {
 
 #[async_trait]
 impl UploadHandler for PutObjectHandler {
+    #[tracing::instrument(
+        name = "upload.put_object",
+        skip(self, body),
+        fields(
+            s3.bucket = %bucket,
+            s3.key = %key,
+            http.content_type = ?content_type,
+            upload.bytes = body.len(),
+            // Result fields - will be set after operation
+            s3.etag = tracing::field::Empty,
+            upload.bytes_written = tracing::field::Empty
+        ),
+        err
+    )]
     async fn upload(
         &self,
         bucket: &str,
@@ -39,19 +53,24 @@ impl UploadHandler for PutObjectHandler {
 
         let bytes_written = body.len() as u64;
 
-        tracing::info!(
-            bucket = bucket,
-            key = key,
-            size = bytes_written,
-            content_type = content_type,
-            "PutObject upload"
-        );
-
-        Ok(UploadResult {
+        let result = UploadResult {
             etag: format!("\"{}\"", uuid::Uuid::new_v4()),
             version_id: None,
             bytes_written,
-        })
+        };
+
+        // Record result in span
+        let span = tracing::Span::current();
+        span.record("s3.etag", &result.etag.as_str());
+        span.record("upload.bytes_written", bytes_written);
+
+        tracing::info!(
+            etag = %result.etag,
+            bytes_written = bytes_written,
+            "PutObject upload completed"
+        );
+
+        Ok(result)
     }
 }
 

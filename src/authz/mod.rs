@@ -12,6 +12,9 @@ use thiserror::Error;
 pub mod opa;
 pub mod openfga;
 
+#[cfg(feature = "tracing")]
+pub mod opa_tracing;
+
 /// Authorization errors
 #[derive(Error, Debug)]
 pub enum AuthzError {
