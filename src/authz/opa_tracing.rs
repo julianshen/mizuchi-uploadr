@@ -2,8 +2,36 @@
 //!
 //! Provides instrumentation for Open Policy Agent (OPA) authorization.
 //! Ensures no PII (user identities, sensitive resources) is leaked in spans.
+//!
+//! # Security & Privacy
+//!
+//! This module implements strict PII protection:
+//! - **No User Identities**: User emails, names, IDs are NOT recorded
+//! - **Sanitized Resources**: Only resource types, not full paths
+//! - **Hashed Subjects**: Optional hashed subject IDs for correlation
+//! - **Decision Only**: Only allow/deny decision is recorded
+//!
+//! # Example
+//!
+//! ```no_run
+//! use mizuchi_uploadr::authz::opa_tracing::{MockAuthzDecision, create_opa_authz_span};
+//!
+//! let decision = MockAuthzDecision {
+//!     subject: "user@example.com".to_string(),
+//!     action: "upload".to_string(),
+//!     resource: "/uploads/file.txt".to_string(),
+//!     allowed: true,
+//! };
+//!
+//! if let Some(span) = create_opa_authz_span(&decision) {
+//!     let _enter = span.enter();
+//!     // Process authorization decision within span context
+//! }
+//! ```
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use tracing::Span;
 
 /// Mock authorization decision for testing
@@ -21,7 +49,7 @@ pub struct MockAuthzDecision {
 pub fn create_opa_authz_span(decision: &MockAuthzDecision) -> Option<Span> {
     // Create span for OPA authorization
     let decision_str = if decision.allowed { "allow" } else { "deny" };
-    
+
     let span = tracing::info_span!(
         "authz.opa",
         authz.provider = "opa",
@@ -29,7 +57,7 @@ pub fn create_opa_authz_span(decision: &MockAuthzDecision) -> Option<Span> {
         authz.action = %decision.action,
         otel.kind = "internal",
     );
-    
+
     Some(span)
 }
 
@@ -39,23 +67,23 @@ pub fn create_opa_authz_span(decision: &MockAuthzDecision) -> Option<Span> {
 /// Ensures no user identities or sensitive resource paths are included.
 pub fn extract_authz_attributes(decision: &MockAuthzDecision) -> HashMap<String, String> {
     let mut attributes = HashMap::new();
-    
+
     // Record decision (allow/deny)
     let decision_str = if decision.allowed { "allow" } else { "deny" };
     attributes.insert("authz.decision".to_string(), decision_str.to_string());
-    
+
     // Record action (safe to include)
     attributes.insert("authz.action".to_string(), decision.action.clone());
-    
+
     // Record resource type (sanitized)
     let resource_type = sanitize_resource_path(&decision.resource);
     attributes.insert("authz.resource_type".to_string(), resource_type);
-    
+
     // Do NOT include:
     // - Subject (user email, username, user ID)
     // - Full resource path (may contain sensitive filenames)
     // - Any policy details
-    
+
     attributes
 }
 
@@ -64,14 +92,39 @@ pub fn extract_authz_attributes(decision: &MockAuthzDecision) -> HashMap<String,
 /// Extracts only the resource type (e.g., "/uploads/file.txt" -> "uploads")
 fn sanitize_resource_path(path: &str) -> String {
     let path = path.trim_start_matches('/');
-    let parts: Vec<&str> = path.split('/').collect();
-    
-    if parts.is_empty() {
+
+    if path.is_empty() {
         return "unknown".to_string();
     }
-    
+
+    let parts: Vec<&str> = path.split('/').collect();
+
+    if parts.is_empty() || parts[0].is_empty() {
+        return "unknown".to_string();
+    }
+
     // Return only the first path segment (bucket/prefix)
     parts[0].to_string()
+}
+
+/// Hash a subject ID for correlation without exposing PII
+///
+/// Creates a deterministic hash of the subject that can be used to correlate
+/// requests from the same user without revealing their identity.
+///
+/// # Arguments
+///
+/// * `subject` - The subject identifier (email, username, etc.)
+///
+/// # Returns
+///
+/// A hex-encoded hash of the subject (first 16 characters)
+#[allow(dead_code)]
+fn hash_subject(subject: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    subject.hash(&mut hasher);
+    let hash = hasher.finish();
+    format!("{:016x}", hash)
 }
 
 #[cfg(test)]
@@ -79,9 +132,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_hash_subject() {
+        let hash1 = hash_subject("user@example.com");
+        let hash2 = hash_subject("user@example.com");
+        let hash3 = hash_subject("other@example.com");
+
+        // Same subject should produce same hash
+        assert_eq!(hash1, hash2);
+
+        // Different subjects should produce different hashes
+        assert_ne!(hash1, hash3);
+
+        // Hash should not contain original subject
+        assert!(!hash1.contains("user@example.com"));
+
+        // Hash should be 16 hex characters
+        assert_eq!(hash1.len(), 16);
+    }
+
+    #[test]
     fn test_sanitize_resource_path() {
         assert_eq!(sanitize_resource_path("/uploads/file.txt"), "uploads");
-        assert_eq!(sanitize_resource_path("/uploads/sensitive/secret.txt"), "uploads");
+        assert_eq!(
+            sanitize_resource_path("/uploads/sensitive/secret.txt"),
+            "uploads"
+        );
         assert_eq!(sanitize_resource_path("uploads/file.txt"), "uploads");
         assert_eq!(sanitize_resource_path(""), "unknown");
     }
@@ -94,18 +169,21 @@ mod tests {
             resource: "/uploads/sensitive.txt".to_string(),
             allowed: false,
         };
-        
+
         let attrs = extract_authz_attributes(&decision);
-        
+
         // Should have decision and action
         assert_eq!(attrs.get("authz.decision"), Some(&"deny".to_string()));
         assert_eq!(attrs.get("authz.action"), Some(&"upload".to_string()));
-        assert_eq!(attrs.get("authz.resource_type"), Some(&"uploads".to_string()));
-        
+        assert_eq!(
+            attrs.get("authz.resource_type"),
+            Some(&"uploads".to_string())
+        );
+
         // Should NOT have user email
         assert!(!attrs.contains_key("authz.subject"));
         assert!(!attrs.values().any(|v| v.contains("user@example.com")));
-        
+
         // Should NOT have sensitive filename
         assert!(!attrs.values().any(|v| v.contains("sensitive.txt")));
     }
@@ -118,7 +196,7 @@ mod tests {
             resource: "/data/file.txt".to_string(),
             allowed: true,
         };
-        
+
         let span = create_opa_authz_span(&decision);
         assert!(span.is_some());
     }
@@ -131,9 +209,8 @@ mod tests {
             resource: "/data/file.txt".to_string(),
             allowed: false,
         };
-        
+
         let span = create_opa_authz_span(&decision);
         assert!(span.is_some());
     }
 }
-

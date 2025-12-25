@@ -2,6 +2,33 @@
 //!
 //! Provides instrumentation for JWT authentication with OpenTelemetry spans.
 //! Ensures no PII (Personally Identifiable Information) is leaked in spans.
+//!
+//! # Security
+//!
+//! This module is designed with security in mind:
+//! - **No Token Values**: Actual JWT tokens are NEVER included in spans
+//! - **No User Details**: User emails, names, or IDs are NOT recorded
+//! - **No Claims**: JWT claims are NOT extracted or logged
+//! - **Presence Only**: Only the presence/absence of tokens is recorded
+//!
+//! # Example
+//!
+//! ```no_run
+//! use mizuchi_uploadr::auth::jwt_tracing::{MockAuthRequest, create_jwt_auth_span};
+//!
+//! let request = MockAuthRequest {
+//!     headers: vec![
+//!         ("authorization".to_string(), "Bearer token123".to_string()),
+//!     ],
+//!     method: "PUT".to_string(),
+//!     path: "/uploads/file.txt".to_string(),
+//! };
+//!
+//! if let Some(span) = create_jwt_auth_span(&request) {
+//!     let _enter = span.enter();
+//!     // Authenticate request within span context
+//! }
+//! ```
 
 use std::collections::HashMap;
 use tracing::Span;
@@ -36,7 +63,7 @@ pub fn create_jwt_auth_span(request: &MockAuthRequest) -> Option<Span> {
         auth.token_present = %has_bearer_token(request),
         otel.kind = "internal",
     );
-    
+
     Some(span)
 }
 
@@ -54,18 +81,18 @@ fn has_bearer_token(request: &MockAuthRequest) -> bool {
 /// Ensures no tokens, emails, or other PII are included.
 pub fn extract_jwt_attributes(request: &MockAuthRequest) -> HashMap<String, String> {
     let mut attributes = HashMap::new();
-    
+
     attributes.insert("auth.method".to_string(), "jwt".to_string());
-    
+
     // Only record presence of token, not the actual token
     let token_present = has_bearer_token(request);
     attributes.insert("auth.token_present".to_string(), token_present.to_string());
-    
+
     // Do NOT include:
     // - Actual token value
     // - User email or username
     // - Any claims from the JWT
-    
+
     attributes
 }
 
@@ -76,13 +103,11 @@ mod tests {
     #[test]
     fn test_has_bearer_token() {
         let request = MockAuthRequest {
-            headers: vec![
-                ("authorization".to_string(), "Bearer token123".to_string()),
-            ],
+            headers: vec![("authorization".to_string(), "Bearer token123".to_string())],
             method: "PUT".to_string(),
             path: "/test".to_string(),
         };
-        
+
         assert!(has_bearer_token(&request));
     }
 
@@ -93,29 +118,29 @@ mod tests {
             method: "PUT".to_string(),
             path: "/test".to_string(),
         };
-        
+
         assert!(!has_bearer_token(&request));
     }
 
     #[test]
     fn test_extract_jwt_attributes_no_pii() {
         let request = MockAuthRequest {
-            headers: vec![
-                ("authorization".to_string(), "Bearer secret_token_123".to_string()),
-            ],
+            headers: vec![(
+                "authorization".to_string(),
+                "Bearer secret_token_123".to_string(),
+            )],
             method: "PUT".to_string(),
             path: "/test".to_string(),
         };
-        
+
         let attrs = extract_jwt_attributes(&request);
-        
+
         // Should have method and token presence
         assert_eq!(attrs.get("auth.method"), Some(&"jwt".to_string()));
         assert_eq!(attrs.get("auth.token_present"), Some(&"true".to_string()));
-        
+
         // Should NOT have actual token
         assert!(!attrs.contains_key("auth.token"));
         assert!(!attrs.values().any(|v| v.contains("secret_token")));
     }
 }
-
