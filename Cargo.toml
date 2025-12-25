@@ -75,10 +75,11 @@ sha2 = "0.10"
 uuid = {version = "1.6", features = ["v4"]}
 tracing-opentelemetry = "0.22"
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
+libc = "0.2.178"
 
 # Linux-specific (zero-copy)
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = {version = "0.27", features = ["fs", "uio"]}
+nix = {version = "0.27", features = ["fs", "uio", "zerocopy"]}
 
 [dev-dependencies]
 # Testing
