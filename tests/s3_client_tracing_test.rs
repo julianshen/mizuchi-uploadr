@@ -6,7 +6,6 @@
 #[cfg(test)]
 mod tests {
     use mizuchi_uploadr::s3::{S3Client, S3ClientConfig};
-    use std::collections::HashMap;
 
     /// Test that S3 client creates a span for PutObject operation
     #[tokio::test]
@@ -98,9 +97,7 @@ mod tests {
 
         // This should create a span named "s3.upload_part"
         let body = bytes::Bytes::from("test part data");
-        let result = client
-            .upload_part("upload-id-123", 1, body)
-            .await;
+        let result = client.upload_part("upload-id-123", 1, body).await;
 
         // We expect this to fail with "not implemented" for now
         assert!(result.is_err() || result.is_ok());
@@ -156,4 +153,3 @@ mod tests {
         assert!(true);
     }
 }
-
