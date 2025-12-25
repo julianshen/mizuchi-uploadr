@@ -155,3 +155,42 @@ fn test_roundtrip_extract_inject() {
     );
 }
 
+#[cfg(feature = "tracing")]
+#[test]
+fn test_span_linking_with_trace_context() {
+    // REFACTOR: Test that spans are actually linked when trace context is present
+    use mizuchi_uploadr::tracing::instrumentation::extract_and_create_span;
+
+    let mut headers = HashMap::new();
+    headers.insert(
+        "traceparent".to_string(),
+        "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_string(),
+    );
+
+    // Create span with trace context
+    let result = extract_and_create_span(&headers, "PUT", "/uploads/test.txt");
+    assert!(result.is_ok());
+
+    // Verify span was created - just check that we got a span back
+    let _span = result.unwrap();
+    // The span linking happens internally via OpenTelemetry
+    // We can't easily verify the parent-child relationship in a unit test
+    // without setting up a full OpenTelemetry subscriber
+}
+
+#[cfg(feature = "tracing")]
+#[test]
+fn test_span_creation_without_trace_context() {
+    // REFACTOR: Test that spans are created even without trace context (root span)
+    use mizuchi_uploadr::tracing::instrumentation::extract_and_create_span;
+
+    let headers = HashMap::new(); // No trace context
+
+    // Create span without trace context (should create root span)
+    let result = extract_and_create_span(&headers, "PUT", "/uploads/test.txt");
+    assert!(result.is_ok());
+
+    // Verify span was created - just check that we got a span back
+    let _span = result.unwrap();
+    // This will be a root span since there's no parent context
+}

@@ -112,9 +112,6 @@ pub fn extract_and_create_span(
     method: &str,
     path: &str,
 ) -> Result<Span, String> {
-    // Try to extract trace context
-    let _trace_context = crate::tracing::propagation::extract_trace_context(headers);
-
     // Create span with basic attributes
     let span = span!(
         Level::INFO,
@@ -122,6 +119,50 @@ pub fn extract_and_create_span(
         http.method = method,
         http.target = path,
     );
+
+    // Try to extract trace context and link parent span
+    if let Some(trace_context) = crate::tracing::propagation::extract_trace_context(headers) {
+        // Convert our TraceContext to OpenTelemetry Context using propagator
+        use opentelemetry::propagation::{Extractor, TextMapPropagator};
+        use opentelemetry_sdk::propagation::TraceContextPropagator;
+        use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+        // Create a simple extractor from our trace context
+        struct SimpleExtractor {
+            traceparent: String,
+            tracestate: Option<String>,
+        }
+
+        impl Extractor for SimpleExtractor {
+            fn get(&self, key: &str) -> Option<&str> {
+                match key.to_lowercase().as_str() {
+                    "traceparent" => Some(&self.traceparent),
+                    "tracestate" => self.tracestate.as_deref(),
+                    _ => None,
+                }
+            }
+
+            fn keys(&self) -> Vec<&str> {
+                let mut keys = vec!["traceparent"];
+                if self.tracestate.is_some() {
+                    keys.push("tracestate");
+                }
+                keys
+            }
+        }
+
+        let extractor = SimpleExtractor {
+            traceparent: trace_context.to_traceparent(),
+            tracestate: trace_context.tracestate.clone(),
+        };
+
+        // Extract OpenTelemetry context using W3C TraceContext propagator
+        let propagator = TraceContextPropagator::new();
+        let parent_context = propagator.extract(&extractor);
+
+        // Set the parent context on the span
+        span.set_parent(parent_context);
+    }
 
     Ok(span)
 }
