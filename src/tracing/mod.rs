@@ -35,6 +35,7 @@
 //! ```
 
 pub mod init;
+pub mod instrumentation;
 pub mod propagation;
 pub mod sampling;
 pub mod subscriber;
