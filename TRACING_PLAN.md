@@ -2,7 +2,31 @@
 
 > **Methodology**: Strict TDD (Test-Driven Development) - Red-Green-Refactor Cycle
 > **Feature**: OpenTelemetry distributed tracing with OTLP export
-> **PR Strategy**: One PR per TDD phase (RED, GREEN, REFACTOR)
+> **PR Strategy**: One PR per phase/feature (complete TDD cycle in single PR)
+
+## Implementation Summary
+
+### PR Strategy (Updated)
+
+**One PR per Phase/Feature** - Each PR contains complete Red-Green-Refactor cycle:
+
+- ✅ **Phase 1** (PR #4): Configuration Infrastructure - COMPLETE
+- 🚧 **Phase 2** (PR #5): OpenTelemetry Integration - IN PROGRESS
+- ⏳ **Phase 3** (PR #6): Span Instrumentation - NOT STARTED
+- ⏳ **Phase 4** (PR #7): Advanced Features - NOT STARTED
+- ⏳ **Phase 5** (PR #8): Production Readiness - NOT STARTED
+
+### Progress Tracking
+
+| Phase                | Status         | PR  | Tests       | Files     |
+| -------------------- | -------------- | --- | ----------- | --------- |
+| 1. Configuration     | ✅ Complete    | #4  | 8/8 passing | 3 files   |
+| 2. OTel Integration  | 🚧 In Progress | #5  | 0/10        | 0/6 files |
+| 3. Instrumentation   | ⏳ Not Started | #6  | 0/15        | 0/7 files |
+| 4. Advanced Features | ⏳ Not Started | #7  | 0/12        | 0/9 files |
+| 5. Production Ready  | ⏳ Not Started | #8  | 0/8         | 0/7 files |
+
+---
 
 ## Current Status
 
@@ -180,51 +204,54 @@ graph TB
 
 ---
 
-## Phase 1: Tracing Infrastructure (Foundation)
+## Phase 1: Tracing Infrastructure (Foundation) ✅ COMPLETE
 
-### 1.1 Configuration Module
+### 1.1 Configuration Module ✅ COMPLETE
 
 **Goal**: Add tracing configuration to YAML config
 
-**TDD Workflow**:
+**Status**: ✅ Merged in PR #4
+
+**TDD Workflow** (Complete Red-Green-Refactor cycle):
 
 1. 🔴 **RED**: Write failing tests for tracing config
 
    - Test: Parse tracing config from YAML
    - Test: Default values when tracing disabled
    - Test: Validate OTLP endpoint URL
-   - **PR #T1**: RED phase - failing tests
+   - Test: Environment variable expansion
+   - Test: Validation for sampling ratio, protocol, compression
 
 2. 🟢 **GREEN**: Implement tracing configuration
 
    - Add `TracingConfig` struct to `src/config/mod.rs`
    - Add OTLP endpoint, service name, sampling rate
-   - Add environment variable expansion
-   - **PR #T2**: GREEN phase - passing tests
+   - Add environment variable expansion with `${VAR:-default}` syntax
+   - Add comprehensive validation
 
 3. 🔵 **REFACTOR**: Clean up config structure
-   - Extract common patterns
-   - Add validation helpers
-   - Improve documentation
-   - **PR #T3**: REFACTOR phase - improved code
+   - Extract validation helpers (`is_valid_http_url`)
+   - Optimize env var expansion with `lazy_static`
+   - Improve documentation with examples
+   - Add default values for all fields
 
-**Files to Create/Modify**:
+**Files Created/Modified**:
 
-- `src/config/mod.rs` (modify - add `TracingConfig`)
-- `config.example.yaml` (modify - add tracing section)
-- `tests/config_test.rs` (new - tracing config tests)
+- ✅ `src/config/mod.rs` - Added `TracingConfig`, `OtlpConfig`, `SamplingConfig`, `BatchConfig`
+- ✅ `config.example.yaml` - Added comprehensive tracing examples
+- ✅ `tests/config_tracing_test.rs` - 8 comprehensive tests
 
 **Configuration Schema**:
 
 ```yaml
 tracing:
   enabled: true
-  service_name: "mizuchi-uploadr"
+  service_name: "${SERVICE_NAME:-mizuchi-uploadr}"
   otlp:
-    endpoint: "http://localhost:4317" # gRPC endpoint
-    protocol: "grpc" # or "http"
+    endpoint: "${OTLP_ENDPOINT:-http://localhost:4317}"
+    protocol: "grpc" # or "http/protobuf"
     timeout_seconds: 10
-    compression: "gzip"
+    compression: "gzip" # or "none"
   sampling:
     strategy: "parent_based" # always, never, ratio, parent_based
     ratio: 1.0 # 0.0 to 1.0
@@ -236,88 +263,54 @@ tracing:
 
 **Acceptance Criteria**:
 
-- [ ] Tracing config parsed from YAML
-- [ ] Environment variables expanded (e.g., `${OTLP_ENDPOINT}`)
-- [ ] Validation errors for invalid config
-- [ ] All tests pass: `cargo test --lib config::tracing`
+- [x] Tracing config parsed from YAML
+- [x] Environment variables expanded (e.g., `${OTLP_ENDPOINT}`)
+- [x] Support for `${VAR:-default}` syntax
+- [x] Validation errors for invalid config
+- [x] All tests pass: 8 tests in `config_tracing_test.rs`
+- [x] Comprehensive documentation with examples
 
 ---
 
-## Phase 2: OpenTelemetry Integration
+## Phase 2: OpenTelemetry Integration 🚧 IN PROGRESS
 
-### 2.1 Tracing Initialization Module
+**Goal**: Complete OpenTelemetry integration with OTLP exporter and subscriber layers
 
-**Goal**: Initialize OpenTelemetry tracer provider with OTLP exporter
+**PR Strategy**: Single PR with complete Red-Green-Refactor cycle
 
 **TDD Workflow**:
 
-1. 🔴 **RED**: Write failing tests for tracer initialization
+1. 🔴 **RED**: Write failing tests
 
-   - Test: Initialize tracer with config
-   - Test: OTLP exporter created correctly
-   - Test: Graceful shutdown on drop
-   - **PR #T4**: RED phase
+   - Tracer initialization tests
+   - OTLP exporter tests
+   - Subscriber layer tests
+   - Graceful shutdown tests
 
-2. 🟢 **GREEN**: Implement tracer initialization
+2. 🟢 **GREEN**: Implement minimal working code
 
-   - Create `src/tracing/mod.rs`
+   - Create `src/tracing/` module
    - Implement `init_tracing()` function
    - Set up OTLP exporter with gRPC
    - Configure batch span processor
-   - **PR #T5**: GREEN phase
+   - Integrate OpenTelemetry layer with tracing-subscriber
+   - Combine OpenTelemetry + Fmt layers
 
-3. 🔵 **REFACTOR**: Optimize initialization
+3. 🔵 **REFACTOR**: Optimize and improve
    - Add retry logic for OTLP connection
    - Improve error handling
-   - Add graceful shutdown
-   - **PR #T6**: REFACTOR phase
-
-**Files to Create/Modify**:
-
-- `src/tracing/mod.rs` (new)
-- `src/tracing/init.rs` (new)
-- `src/lib.rs` (modify - add tracing module)
-- `tests/tracing_init_test.rs` (new)
-
-**Acceptance Criteria**:
-
-- [ ] Tracer provider initialized successfully
-- [ ] OTLP exporter connects to backend
-- [ ] Spans exported in batches
-- [ ] Graceful shutdown flushes pending spans
-- [ ] All tests pass: `cargo test --lib tracing::init`
-
----
-
-### 2.2 Subscriber Layer Integration
-
-**Goal**: Integrate OpenTelemetry layer with tracing-subscriber
-
-**TDD Workflow**:
-
-1. 🔴 **RED**: Write tests for subscriber setup
-
-   - Test: Multiple layers work together
-   - Test: Console output still works
-   - Test: Spans sent to OTLP
-   - **PR #T7**: RED phase
-
-2. 🟢 **GREEN**: Implement layered subscriber
-
-   - Use `tracing-opentelemetry` crate
-   - Combine OpenTelemetry + Fmt layers
-   - Add EnvFilter for log levels
-   - **PR #T8**: GREEN phase
-
-3. 🔵 **REFACTOR**: Optimize subscriber configuration
+   - Add graceful shutdown with RAII pattern
    - Make layers conditional based on config
-   - Add JSON formatting option
-   - **PR #T9**: REFACTOR phase
+   - Add comprehensive documentation
 
 **Files to Create/Modify**:
 
-- `src/tracing/subscriber.rs` (new)
-- `src/main.rs` (modify - use new subscriber)
+- `src/tracing/mod.rs` (new) - Module root
+- `src/tracing/init.rs` (new) - Tracer initialization
+- `src/tracing/subscriber.rs` (new) - Subscriber setup
+- `src/lib.rs` (modify - add tracing module)
+- `tests/tracing_init_test.rs` (new) - Initialization tests
+- `tests/tracing_subscriber_test.rs` (new) - Subscriber tests
 - `Cargo.toml` (add `tracing-opentelemetry`)
 
 **Dependencies to Add**:
@@ -328,101 +321,71 @@ tracing-opentelemetry = "0.22"
 
 **Acceptance Criteria**:
 
+- [ ] Tracer provider initialized successfully
+- [ ] OTLP exporter connects to backend
+- [ ] Spans exported in batches
+- [ ] Graceful shutdown flushes pending spans
 - [ ] OpenTelemetry layer captures spans
 - [ ] Console output still visible
 - [ ] Log levels filtered correctly
-- [ ] All tests pass: `cargo test --lib tracing::subscriber`
+- [ ] All tests pass: `cargo test --lib tracing`
+- [ ] Comprehensive documentation
+
+**PR**: #5 - OpenTelemetry Integration (complete TDD cycle)
 
 ---
 
-## Phase 3: Span Instrumentation
+## Phase 3: Span Instrumentation ⏳ NOT STARTED
 
-### 3.1 HTTP Request Tracing
+**Goal**: Instrument HTTP requests and S3 operations with distributed tracing
 
-**Goal**: Instrument HTTP requests with distributed tracing
+**PR Strategy**: Single PR with complete Red-Green-Refactor cycle
 
 **TDD Workflow**:
 
-1. 🔴 **RED**: Write tests for HTTP span creation
+1. 🔴 **RED**: Write failing tests
 
-   - Test: Root span created for each request
-   - Test: HTTP attributes added (method, path, status)
-   - Test: Trace context extracted from headers
-   - **PR #T10**: RED phase
+   - HTTP request span tests
+   - S3 upload operation span tests
+   - Trace context propagation tests
+   - Multipart upload nested span tests
 
-2. 🟢 **GREEN**: Implement HTTP instrumentation
+2. 🟢 **GREEN**: Implement minimal instrumentation
 
-   - Add middleware for span creation
+   - Add middleware for HTTP span creation
    - Extract W3C Trace Context headers
+   - Add `#[instrument]` to upload handlers
+   - Create spans for S3 API calls
    - Add HTTP semantic conventions
-   - **PR #T11**: GREEN phase
+   - Track bytes transferred
 
-3. 🔵 **REFACTOR**: Optimize HTTP tracing
+3. 🔵 **REFACTOR**: Optimize and enhance
    - Reduce span overhead
-   - Add custom attributes
-   - **PR #T12**: REFACTOR phase
+   - Add custom S3 attributes
+   - Add zero-copy tracking
+   - Improve span naming and structure
 
 **Files to Create/Modify**:
 
-- `src/server/tracing_middleware.rs` (new)
-- `src/server/mod.rs` (modify)
-- `tests/http_tracing_test.rs` (new)
+- `src/server/tracing_middleware.rs` (new) - HTTP tracing middleware
+- `src/server/mod.rs` (modify) - Integrate middleware
+- `src/upload/put_object.rs` (modify) - Add instrumentation
+- `src/upload/multipart.rs` (modify) - Add instrumentation
+- `src/upload/zero_copy.rs` (modify) - Add instrumentation
+- `tests/http_tracing_test.rs` (new) - HTTP tracing tests
+- `tests/upload_tracing_test.rs` (new) - Upload tracing tests
 
 **Span Attributes** (OpenTelemetry Semantic Conventions):
 
 ```rust
+// HTTP attributes
 span.set_attribute("http.method", "PUT");
 span.set_attribute("http.target", "/uploads/file.txt");
 span.set_attribute("http.status_code", 200);
 span.set_attribute("http.request_content_length", 1024);
 span.set_attribute("net.peer.ip", "192.168.1.1");
-```
 
-**Acceptance Criteria**:
-
-- [ ] Span created for each HTTP request
-- [ ] Trace context propagated via headers
-- [ ] HTTP attributes follow semantic conventions
-- [ ] All tests pass: `cargo test --lib server::tracing`
-
----
-
-### 3.2 S3 Upload Operation Tracing
-
-**Goal**: Instrument S3 upload operations with detailed spans
-
-**TDD Workflow**:
-
-1. 🔴 **RED**: Write tests for upload span creation
-
-   - Test: PutObject creates child span
-   - Test: Multipart upload creates nested spans
-   - Test: Zero-copy transfer tracked
-   - **PR #T13**: RED phase
-
-2. 🟢 **GREEN**: Implement upload instrumentation
-
-   - Add `#[instrument]` to upload handlers
-   - Create spans for S3 API calls
-   - Track bytes transferred
-   - **PR #T14**: GREEN phase
-
-3. 🔵 **REFACTOR**: Add custom attributes
-   - S3 bucket, key, size
-   - Upload method (simple/multipart)
-   - Zero-copy enabled/disabled
-   - **PR #T15**: REFACTOR phase
-
-**Files to Create/Modify**:
-
-- `src/upload/put_object.rs` (modify)
-- `src/upload/multipart.rs` (modify)
-- `src/upload/zero_copy.rs` (modify)
-- `tests/upload_tracing_test.rs` (new)
-
-**Custom Span Attributes**:
-
-```rust
+// S3 custom attributes
 span.set_attribute("s3.bucket", "my-bucket");
 span.set_attribute("s3.key", "path/to/file.txt");
 span.set_attribute("s3.operation", "PutObject");
@@ -434,87 +397,59 @@ span.set_attribute("upload.zero_copy", true);
 
 **Acceptance Criteria**:
 
+- [ ] Span created for each HTTP request
+- [ ] Trace context propagated via headers
+- [ ] HTTP attributes follow semantic conventions
 - [ ] Upload operations create child spans
 - [ ] S3 attributes added to spans
 - [ ] Multipart uploads show part-level spans
-- [ ] All tests pass: `cargo test --lib upload::tracing`
+- [ ] Zero-copy transfers tracked
+- [ ] All tests pass: `cargo test --lib`
+
+**PR**: #6 - Span Instrumentation (complete TDD cycle)
 
 ---
 
-### 3.3 Authentication & Authorization Tracing
+## Phase 4: Advanced Features ⏳ NOT STARTED
 
-**Goal**: Trace auth/authz operations for security auditing
+**Goal**: Add trace context propagation, auth tracing, and performance optimization
 
-**TDD Workflow**:
-
-1. 🔴 **RED**: Write tests for auth tracing
-
-   - Test: JWT validation creates span
-   - Test: SigV4 validation creates span
-   - Test: OPA/OpenFGA calls traced
-   - **PR #T16**: RED phase
-
-2. 🟢 **GREEN**: Implement auth instrumentation
-
-   - Add spans to JWT validator
-   - Add spans to SigV4 validator
-   - Add spans to authz clients
-   - **PR #T17**: GREEN phase
-
-3. 🔵 **REFACTOR**: Add security attributes
-   - User ID (without PII)
-   - Auth method used
-   - Authorization decision
-   - **PR #T18**: REFACTOR phase
-
-**Files to Create/Modify**:
-
-- `src/auth/jwt.rs` (modify)
-- `src/auth/sigv4.rs` (modify)
-- `src/authz/opa/mod.rs` (modify)
-- `src/authz/openfga/mod.rs` (modify)
-
-**Acceptance Criteria**:
-
-- [ ] Auth operations traced
-- [ ] No PII in span attributes
-- [ ] Authorization decisions logged
-- [ ] All tests pass: `cargo test --lib auth::tracing authz::tracing`
-
----
-
-## Phase 4: Advanced Features
-
-### 4.1 Trace Context Propagation
-
-**Goal**: Propagate trace context across service boundaries
+**PR Strategy**: Single PR with complete Red-Green-Refactor cycle
 
 **TDD Workflow**:
 
-1. 🔴 **RED**: Write tests for context propagation
+1. 🔴 **RED**: Write failing tests
 
-   - Test: W3C Trace Context headers extracted
-   - Test: Trace context injected into S3 requests
-   - Test: Parent-child span relationships
-   - **PR #T19**: RED phase
+   - W3C Trace Context propagation tests
+   - Auth/authz tracing tests
+   - Performance impact tests
 
-2. 🟢 **GREEN**: Implement context propagation
+2. 🟢 **GREEN**: Implement features
 
    - Extract `traceparent` and `tracestate` headers
-   - Inject context into outgoing requests
+   - Inject context into S3 requests
+   - Add spans to JWT/SigV4 validators
+   - Add spans to authz clients
    - Link spans correctly
-   - **PR #T20**: GREEN phase
 
-3. 🔵 **REFACTOR**: Optimize propagation
-   - Cache context extractors
-   - Reduce allocations
-   - **PR #T21**: REFACTOR phase
+3. 🔵 **REFACTOR**: Optimize and secure
+
+   - Reduce tracing overhead
+   - Ensure no PII in span attributes
+   - Add security-relevant attributes
+   - Performance tuning
 
 **Files to Create/Modify**:
 
-- `src/tracing/propagation.rs` (new)
-- `src/s3/client.rs` (modify)
-- `tests/propagation_test.rs` (new)
+- `src/tracing/propagation.rs` (new) - W3C Trace Context
+- `src/auth/jwt.rs` (modify) - Add tracing
+- `src/auth/sigv4.rs` (modify) - Add tracing
+- `src/authz/opa/mod.rs` (modify) - Add tracing
+- `src/authz/openfga/mod.rs` (modify) - Add tracing
+- `src/s3/mod.rs` (modify) - Inject trace context
+- `tests/propagation_test.rs` (new) - Propagation tests
+- `tests/auth_tracing_test.rs` (new) - Auth tracing tests
+- `benches/tracing_benchmark.rs` (new) - Performance benchmarks
 
 **W3C Trace Context Headers**:
 
@@ -528,165 +463,71 @@ tracestate: congo=t61rcWkgMzE
 - [ ] Trace context extracted from incoming requests
 - [ ] Context propagated to S3 API calls
 - [ ] Distributed traces work end-to-end
-- [ ] All tests pass: `cargo test --lib tracing::propagation`
-
----
-
-### 4.2 Sampling Strategies
-
-**Goal**: Implement intelligent trace sampling
-
-**TDD Workflow**:
-
-1. 🔴 **RED**: Write tests for sampling
-
-   - Test: Always sampler samples all traces
-   - Test: Ratio sampler samples percentage
-   - Test: Parent-based sampler respects parent
-   - **PR #T22**: RED phase
-
-2. 🟢 **GREEN**: Implement sampling strategies
-
-   - Configure sampler from config
-   - Support multiple strategies
-   - **PR #T23**: GREEN phase
-
-3. 🔵 **REFACTOR**: Add custom samplers
-   - Error-based sampling (always sample errors)
-   - Slow request sampling
-   - **PR #T24**: REFACTOR phase
-
-**Files to Create/Modify**:
-
-- `src/tracing/sampling.rs` (new)
-- `src/tracing/init.rs` (modify)
-
-**Acceptance Criteria**:
-
+- [ ] Auth operations traced (no PII)
+- [ ] Authorization decisions logged
 - [ ] Sampling strategies configurable
-- [ ] Ratio sampling works correctly
-- [ ] Parent-based sampling respects upstream
-- [ ] All tests pass: `cargo test --lib tracing::sampling`
+- [ ] Performance overhead < 5%
+- [ ] All tests pass: `cargo test --lib`
+- [ ] Benchmarks show acceptable overhead
+
+**PR**: #7 - Advanced Tracing Features (complete TDD cycle)
 
 ---
 
-### 4.3 Performance Optimization
+## Phase 5: Production Readiness ⏳ NOT STARTED
 
-**Goal**: Minimize tracing overhead
+**Goal**: Error handling, resilience, and comprehensive documentation
 
-**TDD Workflow**:
-
-1. 🔴 **RED**: Write benchmark tests
-
-   - Benchmark: Request with tracing vs without
-   - Benchmark: Span creation overhead
-   - Benchmark: OTLP export latency
-   - **PR #T25**: RED phase
-
-2. 🟢 **GREEN**: Optimize hot paths
-
-   - Use batch span processor
-   - Reduce attribute allocations
-   - Optimize span creation
-   - **PR #T26**: GREEN phase
-
-3. 🔵 **REFACTOR**: Final optimizations
-   - Tune batch processor settings
-   - Add span caching
-   - **PR #T27**: REFACTOR phase
-
-**Files to Create/Modify**:
-
-- `benches/tracing_benchmark.rs` (new)
-- `src/tracing/init.rs` (modify)
-
-**Acceptance Criteria**:
-
-- [ ] Tracing overhead <5% of request latency
-- [ ] Batch export reduces network calls
-- [ ] No memory leaks in long-running tests
-- [ ] All benchmarks pass: `cargo bench tracing`
-
----
-
-## Phase 5: Production Readiness
-
-### 5.1 Error Handling & Resilience
-
-**Goal**: Handle tracing backend failures gracefully
+**PR Strategy**: Single PR with complete Red-Green-Refactor cycle
 
 **TDD Workflow**:
 
-1. 🔴 **RED**: Write tests for failure scenarios
+1. 🔴 **RED**: Write failing tests
 
-   - Test: OTLP backend unavailable
-   - Test: Network timeout
-   - Test: Invalid configuration
-   - **PR #T28**: RED phase
+   - OTLP backend unavailable tests
+   - Network timeout tests
+   - Invalid configuration tests
+   - Documentation example tests
 
-2. 🟢 **GREEN**: Implement error handling
+2. 🟢 **GREEN**: Implement features
 
    - Retry logic for OTLP export
    - Fallback to console logging
    - Circuit breaker for backend
-   - **PR #T29**: GREEN phase
+   - Add module-level docs
+   - Create examples directory
+   - Document configuration options
 
-3. 🔵 **REFACTOR**: Improve resilience
+3. 🔵 **REFACTOR**: Polish and optimize
    - Add exponential backoff
-   - Log export failures
-   - **PR #T30**: REFACTOR phase
+   - Log export failures gracefully
+   - Add diagrams to docs
+   - Add troubleshooting guide
+   - Ensure no memory leaks
 
 **Files to Create/Modify**:
 
-- `src/tracing/error.rs` (new)
-- `src/tracing/init.rs` (modify)
+- `src/tracing/error.rs` (new) - Error handling
+- `src/tracing/init.rs` (modify) - Add resilience
+- `docs/TRACING.md` (new) - Comprehensive guide
+- `examples/tracing_jaeger.rs` (new) - Jaeger example
+- `examples/tracing_tempo.rs` (new) - Tempo example
+- `src/tracing/mod.rs` (modify) - Add documentation
+- `tests/tracing_error_test.rs` (new) - Error handling tests
 
 **Acceptance Criteria**:
 
 - [ ] Application continues if tracing fails
 - [ ] Export failures logged but don't crash
 - [ ] Retry logic prevents thundering herd
-- [ ] All tests pass: `cargo test --lib tracing::error`
-
----
-
-### 5.2 Documentation & Examples
-
-**Goal**: Comprehensive tracing documentation
-
-**TDD Workflow**:
-
-1. 🔴 **RED**: Write documentation tests
-
-   - Test: Example configurations compile
-   - Test: Code examples in docs work
-   - **PR #T31**: RED phase
-
-2. 🟢 **GREEN**: Write documentation
-
-   - Add module-level docs
-   - Create examples directory
-   - Document configuration options
-   - **PR #T32**: GREEN phase
-
-3. 🔵 **REFACTOR**: Improve docs
-   - Add diagrams
-   - Add troubleshooting guide
-   - **PR #T33**: REFACTOR phase
-
-**Files to Create/Modify**:
-
-- `docs/TRACING.md` (new)
-- `examples/tracing_jaeger.rs` (new)
-- `examples/tracing_tempo.rs` (new)
-- `src/tracing/mod.rs` (add docs)
-
-**Acceptance Criteria**:
-
 - [ ] All public APIs documented
 - [ ] Examples run successfully
 - [ ] Troubleshooting guide complete
+- [ ] All tests pass: `cargo test --lib`
 - [ ] All doc tests pass: `cargo test --doc`
+- [ ] No memory leaks in long-running tests
+
+**PR**: #8 - Production Readiness (complete TDD cycle)
 
 ---
 
