@@ -5,7 +5,6 @@
 
 use super::UploadError;
 use std::io;
-use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Default buffer size for transfers
 pub const DEFAULT_BUFFER_SIZE: usize = 65536; // 64KB
@@ -19,6 +18,7 @@ mod linux {
     use super::*;
     use nix::fcntl::{splice, SpliceFFlags};
     use nix::unistd::pipe;
+    use std::os::fd::IntoRawFd;
     use std::os::unix::io::{AsRawFd, RawFd};
 
     /// Zero-copy transfer using Linux splice(2)
@@ -134,7 +134,7 @@ mod linux {
 #[cfg(not(target_os = "linux"))]
 mod fallback {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
 
     /// Buffered transfer (fallback for non-Linux platforms)
     pub struct ZeroCopyTransfer {
