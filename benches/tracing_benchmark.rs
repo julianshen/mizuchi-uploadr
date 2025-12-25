@@ -3,12 +3,12 @@
 //! Measures the performance overhead of distributed tracing to ensure
 //! it stays below 5% of request latency.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mizuchi_uploadr::tracing::propagation::{
     extract_trace_context, inject_trace_context, TraceContext,
 };
 use mizuchi_uploadr::tracing::sampling::{
-    AdvancedSampler, ErrorBasedSampler, SamplingDecision, SamplingRule, SlowRequestSampler,
+    AdvancedSampler, ErrorBasedSampler, SamplingRule, SlowRequestSampler,
 };
 use std::collections::HashMap;
 
