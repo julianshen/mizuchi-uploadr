@@ -1,13 +1,13 @@
 [package]
-name = "mizuchi-uploadr"
-version = "0.1.0"
-edition = "2021"
 authors = ["Julian Shen"]
-description = "High-performance upload-only S3 proxy with Linux zero-copy optimization"
-license = "MIT"
-repository = "https://github.com/julianshen/mizuchi-uploadr"
-keywords = ["s3", "proxy", "upload", "zero-copy", "splice"]
 categories = ["network-programming", "web-programming"]
+description = "High-performance upload-only S3 proxy with Linux zero-copy optimization"
+edition = "2021"
+keywords = ["s3", "proxy", "upload", "zero-copy", "splice"]
+license = "MIT"
+name = "mizuchi-uploadr"
+repository = "https://github.com/julianshen/mizuchi-uploadr"
+version = "0.1.0"
 
 [lib]
 name = "mizuchi_uploadr"
@@ -19,85 +19,88 @@ path = "src/main.rs"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.35", features = ["full"] }
+tokio = {version = "1.35", features = ["full"]}
 
 # HTTP framework
-hyper = { version = "1.1", features = ["full"] }
-hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
+hyper = {version = "1.1", features = ["full"]}
+hyper-util = {version = "0.1", features = ["full"]}
 
 # AWS S3
 aws-config = "1.1"
+aws-credential-types = "1.1"
 aws-sdk-s3 = "1.12"
 aws-sigv4 = "1.1"
-aws-credential-types = "1.1"
 
 # Authentication
 jsonwebtoken = "9.2"
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+reqwest = {version = "0.11", features = ["json", "rustls-tls"], default-features = false}
 
 # Configuration
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
 config = "0.14"
+serde = {version = "1.0", features = ["derive"]}
+serde_json = "1.0"
+serde_yaml = "0.9"
 
 # Error handling
-thiserror = "1.0"
 anyhow = "1.0"
+thiserror = "1.0"
 
 # Logging & Tracing
+opentelemetry = {version = "0.21", optional = true}
+opentelemetry-otlp = {version = "0.14", optional = true}
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-opentelemetry = { version = "0.21", optional = true }
-opentelemetry-otlp = { version = "0.14", optional = true }
+tracing-subscriber = {version = "0.3", features = ["env-filter", "json"]}
 
 # Metrics
 prometheus = "0.13"
 
 # CLI
-clap = { version = "4.4", features = ["derive"] }
+clap = {version = "4.4", features = ["derive"]}
 
 # Utilities
-bytes = "1.5"
-uuid = { version = "1.6", features = ["v4"] }
+async-trait = "0.1"
 base64 = "0.21"
+bytes = "1.5"
+chrono = {version = "0.4", features = ["serde"]}
+dashmap = "5.5"
+futures = "0.3"
 hex = "0.4"
-sha2 = "0.10"
 hmac = "0.12"
-chrono = { version = "0.4", features = ["serde"] }
 lazy_static = "1.4"
 parking_lot = "0.12"
-dashmap = "5.5"
-async-trait = "0.1"
-futures = "0.3"
 pin-project-lite = "0.2"
 regex-lite = "0.1"
+sha2 = "0.10"
+uuid = {version = "1.6", features = ["v4"]}
+libc = "0.2.178"
 
 # Linux-specific (zero-copy)
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.27", features = ["fs", "uio"] }
+nix = {version = "0.27", features = ["fs", "uio", "zerocopy"]}
 
 [dev-dependencies]
 # Testing
-tokio-test = "0.4"
-criterion = { version = "0.5", features = ["async_tokio"] }
-mockall = "0.12"
-wiremock = "0.5"
-tempfile = "3.9"
 assert_cmd = "2.0"
+criterion = {version = "0.5", features = ["async_tokio"]}
+mockall = "0.12"
 predicates = "3.0"
+tempfile = "3.9"
+tokio-test = "0.4"
+wiremock = "0.5"
 
 # Test utilities
-rand = "0.8"
 fake = "2.9"
+rand = "0.8"
+serial_test = "3.0"
 
 [[bench]]
+harness = false
 name = "upload_benchmark"
-harness = false
 
 [[bench]]
-name = "zero_copy_benchmark"
 harness = false
+name = "zero_copy_benchmark"
 
 [features]
 default = ["metrics"]
@@ -105,11 +108,11 @@ metrics = []
 tracing = ["opentelemetry", "opentelemetry-otlp"]
 
 [profile.release]
-lto = true
 codegen-units = 1
+lto = true
 opt-level = 3
 strip = true
 
 [profile.bench]
-lto = true
 codegen-units = 1
+lto = true

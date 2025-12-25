@@ -49,3 +49,48 @@ buckets:
 metrics:
   enabled: true
   port: 9090
+
+# OpenTelemetry Distributed Tracing
+# Uncomment and configure to enable tracing
+# tracing:
+#   enabled: true
+#   service_name: "${SERVICE_NAME:-mizuchi-uploadr}"
+#
+#   # OTLP Exporter Configuration
+#   otlp:
+#     endpoint: "${OTLP_ENDPOINT:-http://localhost:4317}"
+#     protocol: "grpc"  # or "http/protobuf"
+#     timeout_seconds: 10
+#     compression: "gzip"  # Optional: "gzip" or omit for none
+#
+#   # Sampling Strategy
+#   sampling:
+#     strategy: "always"  # Options: always, never, ratio, parent_based
+#     ratio: 1.0          # Only used with "ratio" strategy (0.0 to 1.0)
+#
+#   # Batch Span Processor
+#   batch:
+#     max_queue_size: 2048
+#     scheduled_delay_millis: 5000  # Export every 5 seconds
+#     max_export_batch_size: 512
+#
+# Example: Production setup with Jaeger
+# tracing:
+#   enabled: true
+#   service_name: "mizuchi-uploadr-prod"
+#   otlp:
+#     endpoint: "http://jaeger:4317"
+#     protocol: "grpc"
+#   sampling:
+#     strategy: "ratio"
+#     ratio: 0.1  # Sample 10% of traces
+#
+# Example: Development setup with Grafana Tempo
+# tracing:
+#   enabled: true
+#   service_name: "mizuchi-uploadr-dev"
+#   otlp:
+#     endpoint: "http://tempo:4317"
+#     protocol: "grpc"
+#   sampling:
+#     strategy: "always"  # Sample all traces in dev

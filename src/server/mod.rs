@@ -86,6 +86,7 @@ mod tests {
                 upload: Default::default(),
             }],
             metrics: MetricsConfig::default(),
+            tracing: None,
         }
     }
 
