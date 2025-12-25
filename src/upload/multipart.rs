@@ -51,6 +51,15 @@ impl MultipartHandler {
     }
 
     /// Initiate a multipart upload
+    #[tracing::instrument(
+        name = "upload.multipart.create",
+        skip(self),
+        fields(
+            s3.bucket = %bucket,
+            s3.key = %key
+        ),
+        err
+    )]
     pub async fn create(&self, bucket: &str, key: &str) -> Result<MultipartUpload, UploadError> {
         // TODO: Implement actual S3 CreateMultipartUpload
         // This is a placeholder for TDD
@@ -73,6 +82,16 @@ impl MultipartHandler {
     }
 
     /// Upload a part
+    #[tracing::instrument(
+        name = "upload.multipart.upload_part",
+        skip(self, upload, body),
+        fields(
+            upload_id = %upload.upload_id,
+            part_number = part_number,
+            upload.bytes = body.len()
+        ),
+        err
+    )]
     pub async fn upload_part(
         &self,
         upload: &mut MultipartUpload,
@@ -109,6 +128,15 @@ impl MultipartHandler {
     }
 
     /// Complete a multipart upload
+    #[tracing::instrument(
+        name = "upload.multipart.complete",
+        skip(self, upload),
+        fields(
+            upload_id = %upload.upload_id,
+            parts_count = upload.parts.len()
+        ),
+        err
+    )]
     pub async fn complete(&self, upload: &MultipartUpload) -> Result<UploadResult, UploadError> {
         if upload.parts.is_empty() {
             return Err(UploadError::MultipartError("No parts uploaded".into()));

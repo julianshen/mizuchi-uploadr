@@ -27,6 +27,17 @@ impl PutObjectHandler {
 
 #[async_trait]
 impl UploadHandler for PutObjectHandler {
+    #[tracing::instrument(
+        name = "upload.put_object",
+        skip(self, body),
+        fields(
+            s3.bucket = %bucket,
+            s3.key = %key,
+            http.content_type = ?content_type,
+            upload.bytes = body.len()
+        ),
+        err
+    )]
     async fn upload(
         &self,
         bucket: &str,
