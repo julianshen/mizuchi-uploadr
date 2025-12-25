@@ -73,6 +73,8 @@ pin-project-lite = "0.2"
 regex-lite = "0.1"
 sha2 = "0.10"
 uuid = {version = "1.6", features = ["v4"]}
+tracing-opentelemetry = "0.22"
+opentelemetry_sdk = "0.21"
 
 # Linux-specific (zero-copy)
 [target.'cfg(target_os = "linux")'.dependencies]
