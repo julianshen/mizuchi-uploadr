@@ -1,12 +1,14 @@
 //! S3 Client module
 //!
-//! Provides S3 client with SigV4 signing and distributed tracing.
+//! Provides S3 client with HTTP API calls and distributed tracing.
 //!
 //! # Features
 //!
+//! - **HTTP API**: Direct HTTP requests to S3-compatible endpoints
 //! - **Distributed Tracing**: All S3 operations create spans with OpenTelemetry
-//! - **W3C Trace Context**: Propagates trace context to S3 requests
-//! - **Semantic Conventions**: Follows OpenTelemetry semantic conventions for S3
+//! - **XML Parsing**: Parses S3 XML responses for multipart uploads
+//! - **Error Handling**: Comprehensive HTTP error handling with S3 error messages
+//! - **W3C Trace Context**: Ready for trace context propagation (TODO)
 //! - **SigV4 Signing**: AWS Signature Version 4 authentication (TODO)
 //!
 //! # Example
@@ -19,9 +21,9 @@
 //! let config = S3ClientConfig {
 //!     bucket: "my-bucket".to_string(),
 //!     region: "us-east-1".to_string(),
-//!     endpoint: None,
-//!     access_key: Some("AKIAIOSFODNN7EXAMPLE".to_string()),
-//!     secret_key: Some("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()),
+//!     endpoint: Some("http://localhost:9000".to_string()), // MinIO
+//!     access_key: Some("minioadmin".to_string()),
+//!     secret_key: Some("minioadmin".to_string()),
 //! };
 //!
 //! let client = S3Client::new(config)?;
@@ -30,6 +32,44 @@
 //! let body = Bytes::from("Hello, World!");
 //! let response = client.put_object("hello.txt", body, Some("text/plain")).await?;
 //! println!("ETag: {}", response.etag);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Multipart Upload Example
+//!
+//! ```no_run
+//! use mizuchi_uploadr::s3::{S3Client, S3ClientConfig, S3CompletedPart};
+//! use bytes::Bytes;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # let config = S3ClientConfig {
+//! #     bucket: "my-bucket".to_string(),
+//! #     region: "us-east-1".to_string(),
+//! #     endpoint: Some("http://localhost:9000".to_string()),
+//! #     access_key: Some("minioadmin".to_string()),
+//! #     secret_key: Some("minioadmin".to_string()),
+//! # };
+//! let client = S3Client::new(config)?;
+//!
+//! // 1. Create multipart upload
+//! let create_response = client.create_multipart_upload("large-file.bin").await?;
+//! let upload_id = create_response.upload_id;
+//!
+//! // 2. Upload parts
+//! let part1 = Bytes::from(vec![0u8; 5 * 1024 * 1024]); // 5MB
+//! let part1_response = client.upload_part(&upload_id, 1, part1).await?;
+//!
+//! let part2 = Bytes::from(vec![1u8; 5 * 1024 * 1024]); // 5MB
+//! let part2_response = client.upload_part(&upload_id, 2, part2).await?;
+//!
+//! // 3. Complete multipart upload
+//! let parts = vec![
+//!     S3CompletedPart { part_number: 1, etag: part1_response.etag },
+//!     S3CompletedPart { part_number: 2, etag: part2_response.etag },
+//! ];
+//! let complete_response = client.complete_multipart_upload(&upload_id, parts).await?;
+//! println!("Upload complete! ETag: {}", complete_response.etag);
 //! # Ok(())
 //! # }
 //! ```
@@ -44,6 +84,13 @@
 //! | CreateMultipartUpload | `s3.create_multipart_upload` | bucket, key, method, upload_id, status_code |
 //! | UploadPart | `s3.upload_part` | bucket, upload_id, part_number, bytes, etag, status_code |
 //! | CompleteMultipartUpload | `s3.complete_multipart_upload` | bucket, upload_id, parts_count, etag, status_code |
+//!
+//! # Implementation Notes
+//!
+//! - **No SigV4 signing yet**: Currently sends unsigned requests (works with MinIO in dev mode)
+//! - **No W3C trace context**: Trace context injection is TODO
+//! - **Hardcoded key in upload_part**: Uses "test-key" - will be fixed when integrated with upload module
+//! - **Simple XML parsing**: Uses basic string matching - consider using quick-xml for complex responses
 
 use bytes::Bytes;
 use thiserror::Error;
@@ -332,6 +379,8 @@ impl S3Client {
         body: Bytes,
     ) -> Result<S3UploadPartResponse, S3ClientError> {
         // Build the request URL with query parameters
+        // TODO: Accept key as parameter instead of hardcoding "test-key"
+        // This will be fixed when integrating with the upload module
         let url = format!(
             "{}/test-key?partNumber={}&uploadId={}",
             self.endpoint(),
@@ -406,6 +455,8 @@ impl S3Client {
         parts: Vec<S3CompletedPart>,
     ) -> Result<S3CompleteMultipartUploadResponse, S3ClientError> {
         // Build the request URL with uploadId query parameter
+        // TODO: Accept key as parameter instead of hardcoding "test-key"
+        // This will be fixed when integrating with the upload module
         let url = format!("{}/test-key?uploadId={}", self.endpoint(), upload_id);
 
         // Build XML body for CompleteMultipartUpload
