@@ -35,6 +35,7 @@
 //! ```
 
 pub mod init;
+pub mod subscriber;
 
 pub use init::{init_tracing, shutdown_tracing, TracingGuard};
-
+pub use subscriber::init_subscriber;
