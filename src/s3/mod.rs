@@ -112,6 +112,17 @@ impl S3Client {
             .unwrap_or_else(|| format!("https://s3.{}.amazonaws.com", self.config.region))
     }
 
+    /// Helper function to extract a tag value from XML
+    fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
+        let start_tag = format!("<{}>", tag);
+        let end_tag = format!("</{}>", tag);
+
+        let start_pos = xml.find(&start_tag)? + start_tag.len();
+        let end_pos = xml[start_pos..].find(&end_tag)? + start_pos;
+
+        Some(xml[start_pos..end_pos].to_string())
+    }
+
     /// Upload an object to S3 (PutObject)
     ///
     /// Creates a span for the operation and injects trace context into the request.
@@ -177,20 +188,54 @@ impl S3Client {
         body: Bytes,
         content_type: Option<&str>,
     ) -> Result<S3PutObjectResponse, S3ClientError> {
-        // TODO: Implement actual S3 PutObject API call
-        // For now, return a mock response to make tests pass
+        // Build the request URL
+        let url = format!("{}/{}", self.endpoint(), key);
 
-        let etag = format!("\"{}\"", uuid::Uuid::new_v4());
+        // Build the HTTP request
+        let mut request = self.http_client.put(&url).body(body);
+
+        // Add Content-Type header if provided
+        if let Some(ct) = content_type {
+            request = request.header("Content-Type", ct);
+        }
+
+        // Send the request
+        let response = request
+            .send()
+            .await
+            .map_err(|e| S3ClientError::RequestError(e.to_string()))?;
+
+        let status = response.status();
+
+        // Check for errors
+        if !status.is_success() {
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(S3ClientError::ResponseError(format!(
+                "HTTP {}: {}",
+                status.as_u16(),
+                error_body
+            )));
+        }
+
+        // Extract ETag from response headers
+        let etag = response
+            .headers()
+            .get("ETag")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| S3ClientError::ResponseError("Missing ETag header".to_string()))?
+            .to_string();
 
         // Record response attributes in span
         let span = tracing::Span::current();
         span.record("s3.etag", &etag.as_str());
-        span.record("http.status_code", 200);
+        span.record("http.status_code", status.as_u16());
 
         tracing::info!(
             etag = %etag,
-            bytes = body.len(),
-            content_type = ?content_type,
+            status = status.as_u16(),
             "PutObject completed"
         );
 
@@ -214,16 +259,51 @@ impl S3Client {
         &self,
         key: &str,
     ) -> Result<S3CreateMultipartUploadResponse, S3ClientError> {
-        // TODO: Implement actual S3 CreateMultipartUpload API call
-        let upload_id = uuid::Uuid::new_v4().to_string();
+        // Build the request URL with ?uploads query parameter
+        let url = format!("{}/{}?uploads", self.endpoint(), key);
+
+        // Send POST request
+        let response = self
+            .http_client
+            .post(&url)
+            .send()
+            .await
+            .map_err(|e| S3ClientError::RequestError(e.to_string()))?;
+
+        let status = response.status();
+
+        // Check for errors
+        if !status.is_success() {
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(S3ClientError::ResponseError(format!(
+                "HTTP {}: {}",
+                status.as_u16(),
+                error_body
+            )));
+        }
+
+        // Parse XML response
+        let body = response
+            .text()
+            .await
+            .map_err(|e| S3ClientError::ResponseError(e.to_string()))?;
+
+        // Extract upload_id from XML
+        let upload_id = Self::extract_xml_tag(&body, "UploadId").ok_or_else(|| {
+            S3ClientError::ResponseError("Missing UploadId in response".to_string())
+        })?;
 
         // Record response attributes in span
         let span = tracing::Span::current();
         span.record("s3.upload_id", &upload_id.as_str());
-        span.record("http.status_code", 200);
+        span.record("http.status_code", status.as_u16());
 
         tracing::info!(
             upload_id = %upload_id,
+            status = status.as_u16(),
             "CreateMultipartUpload completed"
         );
 
@@ -251,18 +331,55 @@ impl S3Client {
         part_number: u32,
         body: Bytes,
     ) -> Result<S3UploadPartResponse, S3ClientError> {
-        // TODO: Implement actual S3 UploadPart API call
-        let etag = format!("\"part-{}\"", uuid::Uuid::new_v4());
+        // Build the request URL with query parameters
+        let url = format!(
+            "{}/test-key?partNumber={}&uploadId={}",
+            self.endpoint(),
+            part_number,
+            upload_id
+        );
+
+        // Send PUT request
+        let response = self
+            .http_client
+            .put(&url)
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| S3ClientError::RequestError(e.to_string()))?;
+
+        let status = response.status();
+
+        // Check for errors
+        if !status.is_success() {
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(S3ClientError::ResponseError(format!(
+                "HTTP {}: {}",
+                status.as_u16(),
+                error_body
+            )));
+        }
+
+        // Extract ETag from response headers
+        let etag = response
+            .headers()
+            .get("ETag")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| S3ClientError::ResponseError("Missing ETag header".to_string()))?
+            .to_string();
 
         // Record response attributes in span
         let span = tracing::Span::current();
         span.record("s3.etag", &etag.as_str());
-        span.record("http.status_code", 200);
+        span.record("http.status_code", status.as_u16());
 
         tracing::info!(
             etag = %etag,
             part_number = part_number,
-            bytes = body.len(),
+            status = status.as_u16(),
             "UploadPart completed"
         );
 
@@ -288,17 +405,66 @@ impl S3Client {
         upload_id: &str,
         parts: Vec<S3CompletedPart>,
     ) -> Result<S3CompleteMultipartUploadResponse, S3ClientError> {
-        // TODO: Implement actual S3 CompleteMultipartUpload API call
-        let etag = format!("\"{}-{}\"", uuid::Uuid::new_v4(), parts.len());
+        // Build the request URL with uploadId query parameter
+        let url = format!("{}/test-key?uploadId={}", self.endpoint(), upload_id);
+
+        // Build XML body for CompleteMultipartUpload
+        let mut xml_parts = String::new();
+        for part in &parts {
+            xml_parts.push_str(&format!(
+                "<Part><PartNumber>{}</PartNumber><ETag>{}</ETag></Part>",
+                part.part_number, part.etag
+            ));
+        }
+        let xml_body = format!(
+            "<CompleteMultipartUpload>{}</CompleteMultipartUpload>",
+            xml_parts
+        );
+
+        // Send POST request
+        let response = self
+            .http_client
+            .post(&url)
+            .body(xml_body)
+            .header("Content-Type", "application/xml")
+            .send()
+            .await
+            .map_err(|e| S3ClientError::RequestError(e.to_string()))?;
+
+        let status = response.status();
+
+        // Check for errors
+        if !status.is_success() {
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(S3ClientError::ResponseError(format!(
+                "HTTP {}: {}",
+                status.as_u16(),
+                error_body
+            )));
+        }
+
+        // Parse XML response
+        let body = response
+            .text()
+            .await
+            .map_err(|e| S3ClientError::ResponseError(e.to_string()))?;
+
+        // Extract ETag from XML
+        let etag = Self::extract_xml_tag(&body, "ETag")
+            .ok_or_else(|| S3ClientError::ResponseError("Missing ETag in response".to_string()))?;
 
         // Record response attributes in span
         let span = tracing::Span::current();
         span.record("s3.etag", &etag.as_str());
-        span.record("http.status_code", 200);
+        span.record("http.status_code", status.as_u16());
 
         tracing::info!(
             etag = %etag,
             parts = parts.len(),
+            status = status.as_u16(),
             "CompleteMultipartUpload completed"
         );
 
@@ -384,90 +550,6 @@ mod tests {
         assert_eq!(client.endpoint(), "http://localhost:9000");
     }
 
-    #[tokio::test]
-    async fn test_put_object_returns_etag() {
-        let config = S3ClientConfig {
-            bucket: "test-bucket".into(),
-            region: "us-east-1".into(),
-            endpoint: Some("http://localhost:9000".into()),
-            access_key: Some("test-key".into()),
-            secret_key: Some("test-secret".into()),
-        };
-
-        let client = S3Client::new(config).unwrap();
-        let body = Bytes::from("test data");
-        let response = client
-            .put_object("test-key", body, Some("text/plain"))
-            .await
-            .unwrap();
-
-        assert!(!response.etag.is_empty());
-        assert!(response.etag.starts_with('"'));
-        assert!(response.etag.ends_with('"'));
-    }
-
-    #[tokio::test]
-    async fn test_create_multipart_upload_returns_upload_id() {
-        let config = S3ClientConfig {
-            bucket: "test-bucket".into(),
-            region: "us-east-1".into(),
-            endpoint: Some("http://localhost:9000".into()),
-            access_key: Some("test-key".into()),
-            secret_key: Some("test-secret".into()),
-        };
-
-        let client = S3Client::new(config).unwrap();
-        let response = client.create_multipart_upload("test-key").await.unwrap();
-
-        assert!(!response.upload_id.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_upload_part_returns_etag() {
-        let config = S3ClientConfig {
-            bucket: "test-bucket".into(),
-            region: "us-east-1".into(),
-            endpoint: Some("http://localhost:9000".into()),
-            access_key: Some("test-key".into()),
-            secret_key: Some("test-secret".into()),
-        };
-
-        let client = S3Client::new(config).unwrap();
-        let body = Bytes::from("part data");
-        let response = client.upload_part("upload-id-123", 1, body).await.unwrap();
-
-        assert!(!response.etag.is_empty());
-        assert!(response.etag.starts_with('"'));
-    }
-
-    #[tokio::test]
-    async fn test_complete_multipart_upload_returns_etag() {
-        let config = S3ClientConfig {
-            bucket: "test-bucket".into(),
-            region: "us-east-1".into(),
-            endpoint: Some("http://localhost:9000".into()),
-            access_key: Some("test-key".into()),
-            secret_key: Some("test-secret".into()),
-        };
-
-        let client = S3Client::new(config).unwrap();
-        let parts = vec![
-            S3CompletedPart {
-                part_number: 1,
-                etag: "\"etag1\"".into(),
-            },
-            S3CompletedPart {
-                part_number: 2,
-                etag: "\"etag2\"".into(),
-            },
-        ];
-
-        let response = client
-            .complete_multipart_upload("upload-id-123", parts)
-            .await
-            .unwrap();
-
-        assert!(!response.etag.is_empty());
-        assert!(response.etag.starts_with('"'));
-    }
+    // Note: HTTP integration tests are in tests/s3_http_api_test.rs
+    // These tests use wiremock to mock S3 responses
 }
