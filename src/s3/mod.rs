@@ -6,9 +6,9 @@
 //!
 //! - **HTTP API**: Direct HTTP requests to S3-compatible endpoints
 //! - **Distributed Tracing**: All S3 operations create spans with OpenTelemetry
+//! - **W3C Trace Context**: Automatic traceparent header injection for distributed tracing
 //! - **XML Parsing**: Parses S3 XML responses for multipart uploads
 //! - **Error Handling**: Comprehensive HTTP error handling with S3 error messages
-//! - **W3C Trace Context**: Ready for trace context propagation (TODO)
 //! - **SigV4 Signing**: AWS Signature Version 4 authentication (TODO)
 //!
 //! # Example
@@ -86,10 +86,22 @@
 //! | UploadPart | `s3.upload_part` | bucket, upload_id, part_number, bytes, etag, status_code |
 //! | CompleteMultipartUpload | `s3.complete_multipart_upload` | bucket, upload_id, parts_count, etag, status_code |
 //!
+//! ## W3C Trace Context Propagation
+//!
+//! All S3 HTTP requests automatically include the `traceparent` header for distributed tracing:
+//!
+//! ```text
+//! traceparent: 00-{trace-id}-{span-id}-{flags}
+//! Example: 00-0000000000000000000001234567890a-0000000012345678-01
+//! ```
+//!
+//! This enables end-to-end tracing across service boundaries, allowing you to track
+//! requests from the upload proxy through to S3 and back.
+//!
 //! # Implementation Notes
 //!
 //! - **No SigV4 signing yet**: Currently sends unsigned requests (works with MinIO in dev mode)
-//! - **No W3C trace context**: Trace context injection is TODO
+//! - **W3C Trace Context**: Automatic traceparent injection (TODO: extract from OpenTelemetry span)
 //! - **Simple XML parsing**: Uses basic string matching - consider using quick-xml for complex responses
 //! - **Key parameter**: All multipart operations now accept key parameter for flexible object naming
 
