@@ -1,7 +1,7 @@
 //! Authentication module
 //!
 //! Provides JWT and SigV4 authentication.
-//! 
+//!
 //! Note: JWT implementation can be referenced from Yatagarasu:
 //! https://github.com/julianshen/yatagarasu/tree/master/src/auth
 
@@ -10,6 +10,11 @@ use thiserror::Error;
 
 pub mod jwt;
 pub mod sigv4;
+
+#[cfg(feature = "tracing")]
+pub mod jwt_tracing;
+#[cfg(feature = "tracing")]
+pub mod sigv4_tracing;
 
 /// Authentication errors
 #[derive(Error, Debug)]
