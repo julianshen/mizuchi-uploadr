@@ -1,0 +1,51 @@
+# Mizuchi Uploadr Configuration
+# Copy this file to config.yaml and modify as needed
+
+server:
+  address: "0.0.0.0:8080"
+  zero_copy:
+    enabled: true
+    pipe_buffer_size: 1048576  # 1MB
+
+buckets:
+  # Public uploads (no auth required)
+  - name: "public-uploads"
+    path_prefix: "/public"
+    s3:
+      bucket: "my-public-bucket"
+      region: "us-east-1"
+      # endpoint: "http://localhost:9000"  # For MinIO
+      access_key: "${AWS_ACCESS_KEY}"
+      secret_key: "${AWS_SECRET_KEY}"
+    auth:
+      enabled: false
+    upload:
+      multipart_threshold: 52428800  # 50MB
+      part_size: 104857600           # 100MB
+      concurrent_parts: 4
+
+  # Private uploads (JWT auth required)
+  - name: "private-uploads"
+    path_prefix: "/private"
+    s3:
+      bucket: "my-private-bucket"
+      region: "us-east-1"
+      access_key: "${AWS_ACCESS_KEY}"
+      secret_key: "${AWS_SECRET_KEY}"
+    auth:
+      enabled: true
+      jwt:
+        secret: "${JWT_SECRET}"
+        algorithm: "HS256"
+        token_sources:
+          - type: "bearer"
+          - type: "query"
+            name: "token"
+    upload:
+      multipart_threshold: 52428800
+      part_size: 104857600
+      concurrent_parts: 4
+
+metrics:
+  enabled: true
+  port: 9090
