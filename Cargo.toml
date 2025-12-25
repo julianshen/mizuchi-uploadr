@@ -91,6 +91,7 @@ wiremock = "0.5"
 # Test utilities
 fake = "2.9"
 rand = "0.8"
+serial_test = "3.0"
 
 [[bench]]
 harness = false
