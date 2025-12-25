@@ -33,6 +33,16 @@ impl SigV4Authenticator {
 
 #[async_trait]
 impl Authenticator for SigV4Authenticator {
+    #[cfg_attr(feature = "tracing", tracing::instrument(
+        name = "auth.sigv4",
+        skip(self, request),
+        fields(
+            auth.method = "sigv4",
+            auth.signature_present = %request.headers.contains_key("authorization"),
+            otel.kind = "internal"
+        ),
+        err
+    ))]
     async fn authenticate(&self, request: &AuthRequest) -> Result<AuthResult, AuthError> {
         // Check for Authorization header
         let auth_header = request
@@ -62,6 +72,12 @@ impl Authenticator for SigV4Authenticator {
             .strip_prefix("Credential=")
             .and_then(|s| s.split('/').next())
             .ok_or(AuthError::InvalidToken("Invalid Credential format".into()))?;
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            access_key = %access_key,
+            "SigV4 authentication successful"
+        );
 
         Ok(AuthResult {
             subject: access_key.to_string(),

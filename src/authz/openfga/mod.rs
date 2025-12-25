@@ -3,7 +3,7 @@
 //! Provides fine-grained access control using OpenFGA.
 //! Reference: https://github.com/julianshen/yatagarasu/tree/master/src/authz/openfga
 
-use super::{AuthzError, AuthzRequest, Authorizer};
+use super::{Authorizer, AuthzError, AuthzRequest};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -64,11 +64,19 @@ impl OpenFgaAuthorizer {
 
 #[async_trait]
 impl Authorizer for OpenFgaAuthorizer {
+    #[cfg_attr(feature = "tracing", tracing::instrument(
+        name = "authz.openfga",
+        skip(self, request),
+        fields(
+            authz.method = "openfga",
+            authz.action = %request.action,
+            authz.relation = %Self::action_to_relation(&request.action),
+            otel.kind = "internal"
+        ),
+        err
+    ))]
     async fn authorize(&self, request: &AuthzRequest) -> Result<bool, AuthzError> {
-        let url = format!(
-            "{}/stores/{}/check",
-            self.config.url, self.config.store_id
-        );
+        let url = format!("{}/stores/{}/check", self.config.url, self.config.store_id);
 
         let check_request = CheckRequest {
             tuple_key: TupleKey {
@@ -98,6 +106,12 @@ impl Authorizer for OpenFgaAuthorizer {
             .json()
             .await
             .map_err(|e| AuthzError::BackendError(e.to_string()))?;
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            decision = %if check_response.allowed { "allow" } else { "deny" },
+            "OpenFGA authorization decision"
+        );
 
         Ok(check_response.allowed)
     }
