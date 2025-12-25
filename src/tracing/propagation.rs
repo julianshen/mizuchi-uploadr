@@ -2,6 +2,62 @@
 //!
 //! Implements W3C Trace Context specification for distributed tracing.
 //! Extracts trace context from incoming HTTP requests and injects it into outgoing S3 requests.
+//!
+//! # W3C Trace Context Specification
+//!
+//! This module implements the [W3C Trace Context](https://www.w3.org/TR/trace-context/) specification
+//! for propagating trace context across service boundaries.
+//!
+//! ## Headers
+//!
+//! - **traceparent**: Required header containing trace ID, span ID, and flags
+//!   - Format: `00-{trace-id}-{span-id}-{trace-flags}`
+//!   - Example: `00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01`
+//!
+//! - **tracestate**: Optional header for vendor-specific trace data
+//!   - Format: `vendor1=value1,vendor2=value2`
+//!   - Example: `congo=t61rcWkgMzE,rojo=00f067aa0ba902b7`
+//!
+//! ## Usage
+//!
+//! ### Extract from Incoming Request
+//!
+//! ```
+//! use std::collections::HashMap;
+//! use mizuchi_uploadr::tracing::propagation::extract_trace_context;
+//!
+//! let mut headers = HashMap::new();
+//! headers.insert(
+//!     "traceparent".to_string(),
+//!     "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_string(),
+//! );
+//!
+//! if let Some(context) = extract_trace_context(&headers) {
+//!     println!("Trace ID: {}", context.trace_id);
+//!     println!("Span ID: {}", context.span_id);
+//!     println!("Sampled: {}", context.is_sampled());
+//! }
+//! ```
+//!
+//! ### Inject into Outgoing Request
+//!
+//! ```
+//! use std::collections::HashMap;
+//! use mizuchi_uploadr::tracing::propagation::{TraceContext, inject_trace_context};
+//!
+//! let context = TraceContext {
+//!     trace_id: "0af7651916cd43dd8448eb211c80319c".to_string(),
+//!     span_id: "b7ad6b7169203331".to_string(),
+//!     trace_flags: 0x01,
+//!     tracestate: None,
+//! };
+//!
+//! let mut headers = HashMap::new();
+//! inject_trace_context(&context, &mut headers);
+//!
+//! // Headers now contain traceparent
+//! assert!(headers.contains_key("traceparent"));
+//! ```
 
 use std::collections::HashMap;
 
@@ -20,6 +76,36 @@ pub struct TraceContext {
     pub trace_flags: u8,
     /// Optional tracestate header value
     pub tracestate: Option<String>,
+}
+
+impl TraceContext {
+    /// Check if the trace is sampled
+    ///
+    /// Returns true if the sampled flag (bit 0) is set
+    pub fn is_sampled(&self) -> bool {
+        (self.trace_flags & 0x01) != 0
+    }
+
+    /// Set the sampled flag
+    ///
+    /// Sets or clears the sampled flag (bit 0)
+    pub fn set_sampled(&mut self, sampled: bool) {
+        if sampled {
+            self.trace_flags |= 0x01;
+        } else {
+            self.trace_flags &= !0x01;
+        }
+    }
+
+    /// Format as traceparent header value
+    ///
+    /// Returns the traceparent header value in W3C format
+    pub fn to_traceparent(&self) -> String {
+        format!(
+            "00-{}-{}-{:02x}",
+            self.trace_id, self.span_id, self.trace_flags
+        )
+    }
 }
 
 /// Extract trace context from HTTP headers
@@ -156,5 +242,58 @@ mod tests {
         assert_eq!(context.span_id, "b7ad6b7169203331");
         assert_eq!(context.trace_flags, 0x01);
     }
-}
 
+    #[test]
+    fn test_is_sampled() {
+        let context = TraceContext {
+            trace_id: "0af7651916cd43dd8448eb211c80319c".to_string(),
+            span_id: "b7ad6b7169203331".to_string(),
+            trace_flags: 0x01,
+            tracestate: None,
+        };
+        assert!(context.is_sampled());
+
+        let context_not_sampled = TraceContext {
+            trace_id: "0af7651916cd43dd8448eb211c80319c".to_string(),
+            span_id: "b7ad6b7169203331".to_string(),
+            trace_flags: 0x00,
+            tracestate: None,
+        };
+        assert!(!context_not_sampled.is_sampled());
+    }
+
+    #[test]
+    fn test_set_sampled() {
+        let mut context = TraceContext {
+            trace_id: "0af7651916cd43dd8448eb211c80319c".to_string(),
+            span_id: "b7ad6b7169203331".to_string(),
+            trace_flags: 0x00,
+            tracestate: None,
+        };
+
+        assert!(!context.is_sampled());
+
+        context.set_sampled(true);
+        assert!(context.is_sampled());
+        assert_eq!(context.trace_flags, 0x01);
+
+        context.set_sampled(false);
+        assert!(!context.is_sampled());
+        assert_eq!(context.trace_flags, 0x00);
+    }
+
+    #[test]
+    fn test_to_traceparent() {
+        let context = TraceContext {
+            trace_id: "0af7651916cd43dd8448eb211c80319c".to_string(),
+            span_id: "b7ad6b7169203331".to_string(),
+            trace_flags: 0x01,
+            tracestate: None,
+        };
+
+        assert_eq!(
+            context.to_traceparent(),
+            "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+        );
+    }
+}
