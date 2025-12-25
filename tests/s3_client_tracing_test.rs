@@ -97,7 +97,9 @@ mod tests {
 
         // This should create a span named "s3.upload_part"
         let body = bytes::Bytes::from("test part data");
-        let result = client.upload_part("upload-id-123", 1, body).await;
+        let result = client
+            .upload_part("test-key", "upload-id-123", 1, body)
+            .await;
 
         // We expect this to fail with "not implemented" for now
         assert!(result.is_err() || result.is_ok());
@@ -119,7 +121,7 @@ mod tests {
         // This should create a span named "s3.complete_multipart_upload"
         let parts = vec![];
         let result = client
-            .complete_multipart_upload("upload-id-123", parts)
+            .complete_multipart_upload("test-key", "upload-id-123", parts)
             .await;
 
         // We expect this to fail with "not implemented" for now

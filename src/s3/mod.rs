@@ -53,22 +53,23 @@
 //! let client = S3Client::new(config)?;
 //!
 //! // 1. Create multipart upload
-//! let create_response = client.create_multipart_upload("large-file.bin").await?;
+//! let key = "large-file.bin";
+//! let create_response = client.create_multipart_upload(key).await?;
 //! let upload_id = create_response.upload_id;
 //!
 //! // 2. Upload parts
 //! let part1 = Bytes::from(vec![0u8; 5 * 1024 * 1024]); // 5MB
-//! let part1_response = client.upload_part(&upload_id, 1, part1).await?;
+//! let part1_response = client.upload_part(key, &upload_id, 1, part1).await?;
 //!
 //! let part2 = Bytes::from(vec![1u8; 5 * 1024 * 1024]); // 5MB
-//! let part2_response = client.upload_part(&upload_id, 2, part2).await?;
+//! let part2_response = client.upload_part(key, &upload_id, 2, part2).await?;
 //!
 //! // 3. Complete multipart upload
 //! let parts = vec![
 //!     S3CompletedPart { part_number: 1, etag: part1_response.etag },
 //!     S3CompletedPart { part_number: 2, etag: part2_response.etag },
 //! ];
-//! let complete_response = client.complete_multipart_upload(&upload_id, parts).await?;
+//! let complete_response = client.complete_multipart_upload(key, &upload_id, parts).await?;
 //! println!("Upload complete! ETag: {}", complete_response.etag);
 //! # Ok(())
 //! # }
@@ -89,8 +90,8 @@
 //!
 //! - **No SigV4 signing yet**: Currently sends unsigned requests (works with MinIO in dev mode)
 //! - **No W3C trace context**: Trace context injection is TODO
-//! - **Hardcoded key in upload_part**: Uses "test-key" - will be fixed when integrated with upload module
 //! - **Simple XML parsing**: Uses basic string matching - consider using quick-xml for complex responses
+//! - **Key parameter**: All multipart operations now accept key parameter for flexible object naming
 
 use bytes::Bytes;
 use thiserror::Error;
@@ -363,6 +364,7 @@ impl S3Client {
         skip(self, body),
         fields(
             s3.bucket = %self.config.bucket,
+            s3.key = %key,
             s3.upload_id = %upload_id,
             s3.part_number = part_number,
             http.method = "PUT",
@@ -374,16 +376,16 @@ impl S3Client {
     )]
     pub async fn upload_part(
         &self,
+        key: &str,
         upload_id: &str,
         part_number: u32,
         body: Bytes,
     ) -> Result<S3UploadPartResponse, S3ClientError> {
         // Build the request URL with query parameters
-        // TODO: Accept key as parameter instead of hardcoding "test-key"
-        // This will be fixed when integrating with the upload module
         let url = format!(
-            "{}/test-key?partNumber={}&uploadId={}",
+            "{}/{}?partNumber={}&uploadId={}",
             self.endpoint(),
+            key,
             part_number,
             upload_id
         );
@@ -441,6 +443,7 @@ impl S3Client {
         skip(self, parts),
         fields(
             s3.bucket = %self.config.bucket,
+            s3.key = %key,
             s3.upload_id = %upload_id,
             http.method = "POST",
             parts_count = parts.len(),
@@ -451,13 +454,12 @@ impl S3Client {
     )]
     pub async fn complete_multipart_upload(
         &self,
+        key: &str,
         upload_id: &str,
         parts: Vec<S3CompletedPart>,
     ) -> Result<S3CompleteMultipartUploadResponse, S3ClientError> {
         // Build the request URL with uploadId query parameter
-        // TODO: Accept key as parameter instead of hardcoding "test-key"
-        // This will be fixed when integrating with the upload module
-        let url = format!("{}/test-key?uploadId={}", self.endpoint(), upload_id);
+        let url = format!("{}/{}?uploadId={}", self.endpoint(), key, upload_id);
 
         // Build XML body for CompleteMultipartUpload
         let mut xml_parts = String::new();

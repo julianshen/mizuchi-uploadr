@@ -114,7 +114,10 @@ mod tests {
         let client = S3Client::new(config).unwrap();
 
         let body = Bytes::from("part data");
-        let response = client.upload_part("test-upload-id", 1, body).await.unwrap();
+        let response = client
+            .upload_part("test-key", "test-upload-id", 1, body)
+            .await
+            .unwrap();
 
         assert_eq!(response.etag, "\"part-etag-1\"");
     }
@@ -151,7 +154,7 @@ mod tests {
         ];
 
         let response = client
-            .complete_multipart_upload("test-upload-id", parts)
+            .complete_multipart_upload("test-key", "test-upload-id", parts)
             .await
             .unwrap();
 
@@ -186,5 +189,71 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("403") || err.to_string().contains("AccessDenied"));
+    }
+
+    #[tokio::test]
+    async fn test_upload_part_uses_correct_key() {
+        let mock_server = MockServer::start().await;
+
+        // Test with a different key to ensure it's not hardcoded
+        Mock::given(method("PUT"))
+            .and(path("/my-custom-key.bin"))
+            .and(query_param("partNumber", "2"))
+            .and(query_param("uploadId", "upload-xyz"))
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"custom-part-etag\""))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(mock_server.uri());
+        let client = S3Client::new(config).unwrap();
+
+        let body = Bytes::from("custom part data");
+        let response = client
+            .upload_part("my-custom-key.bin", "upload-xyz", 2, body)
+            .await
+            .unwrap();
+
+        assert_eq!(response.etag, "\"custom-part-etag\"");
+    }
+
+    #[tokio::test]
+    async fn test_complete_multipart_upload_uses_correct_key() {
+        let mock_server = MockServer::start().await;
+
+        // Test with a different key to ensure it's not hardcoded
+        Mock::given(method("POST"))
+            .and(path("/uploads/large-file.dat"))
+            .and(query_param("uploadId", "upload-abc-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                    <CompleteMultipartUploadResult>
+                        <ETag>"custom-final-etag"</ETag>
+                    </CompleteMultipartUploadResult>"#,
+            ))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(mock_server.uri());
+        let client = S3Client::new(config).unwrap();
+
+        let parts = vec![
+            S3CompletedPart {
+                part_number: 1,
+                etag: "\"part1\"".to_string(),
+            },
+            S3CompletedPart {
+                part_number: 2,
+                etag: "\"part2\"".to_string(),
+            },
+        ];
+
+        let response = client
+            .complete_multipart_upload("uploads/large-file.dat", "upload-abc-123", parts)
+            .await
+            .unwrap();
+
+        assert_eq!(response.etag, "\"custom-final-etag\"");
     }
 }
