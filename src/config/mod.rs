@@ -1,8 +1,8 @@
 //! Configuration module for Mizuchi Uploadr
 //!
-//! Handles loading and parsing of YAML configuration files.
+//! Handles loading and parsing of YAML configuration files with support for
+//! environment variable expansion and comprehensive validation.
 
-use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
@@ -11,8 +11,22 @@ mod loader;
 
 pub use loader::ConfigLoader;
 
-/// Expand environment variables in a string
-/// Supports ${VAR_NAME} syntax
+// ============================================================================
+// Environment Variable Expansion
+// ============================================================================
+
+/// Expand environment variables in a string.
+///
+/// Supports `${VAR_NAME}` syntax where VAR_NAME must start with a letter or
+/// underscore and contain only uppercase letters, digits, and underscores.
+///
+/// # Examples
+///
+/// ```ignore
+/// std::env::set_var("MY_VAR", "value");
+/// let result = expand_env_vars("prefix-${MY_VAR}-suffix");
+/// assert_eq!(result, "prefix-value-suffix");
+/// ```
 fn expand_env_vars(s: &str) -> String {
     let mut result = s.to_string();
     let re = regex_lite::Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)\}").unwrap();
@@ -27,13 +41,25 @@ fn expand_env_vars(s: &str) -> String {
     result
 }
 
-/// Custom deserializer for strings with environment variable expansion
+/// Custom deserializer for strings with environment variable expansion.
+///
+/// This is used with serde's `deserialize_with` attribute to automatically
+/// expand environment variables when deserializing configuration values.
 fn deserialize_with_env<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::de::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
     Ok(expand_env_vars(&s))
+}
+
+// ============================================================================
+// Validation Helpers
+// ============================================================================
+
+/// Validate that a URL starts with http:// or https://
+fn is_valid_http_url(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
 }
 
 /// Configuration errors
@@ -85,15 +111,10 @@ impl Config {
 
         // Validate tracing config if present
         if let Some(ref tracing) = self.tracing {
-            if tracing.enabled {
-                // Validate OTLP endpoint URL
-                if !tracing.otlp.endpoint.starts_with("http://")
-                    && !tracing.otlp.endpoint.starts_with("https://")
-                {
-                    return Err(ConfigError::ValidationError(
-                        "Invalid OTLP endpoint: must start with http:// or https://".into(),
-                    ));
-                }
+            if tracing.enabled && !is_valid_http_url(&tracing.otlp.endpoint) {
+                return Err(ConfigError::ValidationError(
+                    "Invalid OTLP endpoint: must start with http:// or https://".into(),
+                ));
             }
         }
 
@@ -260,30 +281,84 @@ fn default_metrics_port() -> u16 {
     9090
 }
 
-/// Tracing configuration
+// ============================================================================
+// Tracing Configuration
+// ============================================================================
+
+/// OpenTelemetry distributed tracing configuration.
+///
+/// Enables distributed tracing with OTLP (OpenTelemetry Protocol) export to
+/// backends like Jaeger, Tempo, or any OTLP-compatible collector.
+///
+/// # Example
+///
+/// ```yaml
+/// tracing:
+///   enabled: true
+///   service_name: "mizuchi-uploadr"
+///   otlp:
+///     endpoint: "http://localhost:4317"
+///     protocol: "grpc"
+///   sampling:
+///     strategy: "always"
+///     ratio: 1.0
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TracingConfig {
+    /// Enable or disable tracing. Default: false
     #[serde(default)]
     pub enabled: bool,
+
+    /// Service name for trace identification. Supports ${VAR} expansion.
     #[serde(deserialize_with = "deserialize_with_env")]
     pub service_name: String,
+
+    /// OTLP exporter configuration
     #[serde(default)]
     pub otlp: OtlpConfig,
+
+    /// Trace sampling configuration
     #[serde(default)]
     pub sampling: SamplingConfig,
+
+    /// Batch span processor configuration
     #[serde(default)]
     pub batch: BatchConfig,
 }
 
-/// OTLP exporter configuration
+/// OTLP (OpenTelemetry Protocol) exporter configuration.
+///
+/// Configures how traces are exported to an OTLP-compatible backend.
+///
+/// # Supported Protocols
+/// - `grpc` - gRPC protocol (default, recommended)
+/// - `http/protobuf` - HTTP with protobuf encoding
+///
+/// # Example
+///
+/// ```yaml
+/// otlp:
+///   endpoint: "${OTLP_ENDPOINT}"  # Supports env vars
+///   protocol: "grpc"
+///   timeout_seconds: 10
+///   compression: "gzip"  # Optional: gzip, none
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OtlpConfig {
+    /// OTLP collector endpoint URL. Supports ${VAR} expansion.
+    /// Must start with http:// or https://
     #[serde(deserialize_with = "deserialize_with_env")]
     pub endpoint: String,
+
+    /// Protocol to use: "grpc" or "http/protobuf". Default: "grpc"
     #[serde(default = "default_otlp_protocol")]
     pub protocol: String,
+
+    /// Timeout for OTLP export in seconds. Default: 10
     #[serde(default = "default_otlp_timeout")]
     pub timeout_seconds: u64,
+
+    /// Optional compression: "gzip" or "none". Default: none
     #[serde(default)]
     pub compression: Option<String>,
 }
@@ -307,11 +382,31 @@ fn default_otlp_timeout() -> u64 {
     10
 }
 
-/// Sampling configuration
+/// Trace sampling configuration.
+///
+/// Controls which traces are recorded and exported to reduce overhead
+/// and storage costs in high-traffic environments.
+///
+/// # Sampling Strategies
+/// - `always` - Sample all traces (100%, default for development)
+/// - `never` - Sample no traces (0%, useful for disabling)
+/// - `ratio` - Sample a percentage of traces based on `ratio` field
+/// - `parent_based` - Respect parent span's sampling decision
+///
+/// # Example
+///
+/// ```yaml
+/// sampling:
+///   strategy: "ratio"
+///   ratio: 0.1  # Sample 10% of traces
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SamplingConfig {
+    /// Sampling strategy. Default: "always"
     #[serde(default = "default_sampling_strategy")]
     pub strategy: String,
+
+    /// Sampling ratio (0.0 to 1.0). Only used with "ratio" strategy. Default: 1.0
     #[serde(default = "default_sampling_ratio")]
     pub ratio: f64,
 }
@@ -333,13 +428,36 @@ fn default_sampling_ratio() -> f64 {
     1.0
 }
 
-/// Batch span processor configuration
+/// Batch span processor configuration.
+///
+/// Controls how spans are batched before export to reduce network overhead
+/// and improve performance. The processor exports spans when either the
+/// queue size or scheduled delay threshold is reached.
+///
+/// # Performance Tuning
+/// - Increase `max_queue_size` for high-throughput scenarios
+/// - Decrease `scheduled_delay_millis` for lower latency (more frequent exports)
+/// - Adjust `max_export_batch_size` based on OTLP backend limits
+///
+/// # Example
+///
+/// ```yaml
+/// batch:
+///   max_queue_size: 2048
+///   scheduled_delay_millis: 5000  # Export every 5 seconds
+///   max_export_batch_size: 512
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchConfig {
+    /// Maximum number of spans to queue before forcing export. Default: 2048
     #[serde(default = "default_max_queue_size")]
     pub max_queue_size: usize,
+
+    /// Delay in milliseconds between scheduled exports. Default: 5000 (5 seconds)
     #[serde(default = "default_scheduled_delay")]
     pub scheduled_delay_millis: u64,
+
+    /// Maximum number of spans per export batch. Default: 512
     #[serde(default = "default_max_export_batch_size")]
     pub max_export_batch_size: usize,
 }
