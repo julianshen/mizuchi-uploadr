@@ -138,45 +138,55 @@ impl TraceContext {
 /// assert!(context.is_some());
 /// ```
 pub fn extract_trace_context(headers: &HashMap<String, String>) -> Option<TraceContext> {
-    // Get traceparent header (case-insensitive)
+    // Fast path: try exact match first (most common case)
     let traceparent = headers
-        .iter()
-        .find(|(k, _)| k.to_lowercase() == "traceparent")
-        .map(|(_, v)| v)?;
+        .get("traceparent")
+        .or_else(|| headers.get("Traceparent"))
+        .or_else(|| headers.get("TRACEPARENT"))?;
 
     // Parse traceparent: version-trace_id-span_id-trace_flags
-    let parts: Vec<&str> = traceparent.split('-').collect();
-    if parts.len() != 4 {
-        return None;
-    }
+    // Optimized: avoid collecting into Vec, use split directly
+    let mut parts = traceparent.split('-');
 
     // Validate version (must be "00")
-    if parts[0] != "00" {
+    if parts.next()? != "00" {
         return None;
     }
 
-    // Validate trace_id (32 hex chars)
-    if parts[1].len() != 32 || !parts[1].chars().all(|c| c.is_ascii_hexdigit()) {
+    // Get trace_id (32 hex chars)
+    let trace_id = parts.next()?;
+    if trace_id.len() != 32 {
+        return None;
+    }
+    // Fast hex validation: check bytes directly
+    if !trace_id.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
 
-    // Validate span_id (16 hex chars)
-    if parts[2].len() != 16 || !parts[2].chars().all(|c| c.is_ascii_hexdigit()) {
+    // Get span_id (16 hex chars)
+    let span_id = parts.next()?;
+    if span_id.len() != 16 {
+        return None;
+    }
+    // Fast hex validation: check bytes directly
+    if !span_id.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
 
     // Parse trace_flags (2 hex chars = 1 byte)
-    let trace_flags = u8::from_str_radix(parts[3], 16).ok()?;
+    let trace_flags_str = parts.next()?;
+    let trace_flags = u8::from_str_radix(trace_flags_str, 16).ok()?;
 
-    // Get optional tracestate header
+    // Get optional tracestate header (fast path: try exact matches first)
     let tracestate = headers
-        .iter()
-        .find(|(k, _)| k.to_lowercase() == "tracestate")
-        .map(|(_, v)| v.clone());
+        .get("tracestate")
+        .or_else(|| headers.get("Tracestate"))
+        .or_else(|| headers.get("TRACESTATE"))
+        .cloned();
 
     Some(TraceContext {
-        trace_id: parts[1].to_string(),
-        span_id: parts[2].to_string(),
+        trace_id: trace_id.to_string(),
+        span_id: span_id.to_string(),
         trace_flags,
         tracestate,
     })
@@ -212,10 +222,17 @@ pub fn extract_trace_context(headers: &HashMap<String, String>) -> Option<TraceC
 /// ```
 pub fn inject_trace_context(context: &TraceContext, headers: &mut HashMap<String, String>) {
     // Format traceparent: version-trace_id-span_id-trace_flags
-    let traceparent = format!(
-        "00-{}-{}-{:02x}",
-        context.trace_id, context.span_id, context.trace_flags
-    );
+    // Pre-allocate string with exact capacity to avoid reallocations
+    // Format: "00-" (3) + trace_id (32) + "-" (1) + span_id (16) + "-" (1) + flags (2) = 55 bytes
+    let mut traceparent = String::with_capacity(55);
+    traceparent.push_str("00-");
+    traceparent.push_str(&context.trace_id);
+    traceparent.push('-');
+    traceparent.push_str(&context.span_id);
+    traceparent.push('-');
+    // Format trace_flags as 2-digit hex
+    use std::fmt::Write;
+    let _ = write!(&mut traceparent, "{:02x}", context.trace_flags);
 
     headers.insert("traceparent".to_string(), traceparent);
 
