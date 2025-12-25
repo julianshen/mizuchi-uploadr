@@ -2,6 +2,9 @@
 //!
 //! Handles incoming HTTP requests and routes them to appropriate handlers.
 
+#[cfg(feature = "tracing")]
+pub mod http_tracing;
+
 use crate::config::Config;
 use std::net::SocketAddr;
 use thiserror::Error;
