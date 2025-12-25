@@ -114,7 +114,10 @@ mod tests {
         let client = S3Client::new(config).unwrap();
 
         let body = Bytes::from("part data");
-        let response = client.upload_part("test-upload-id", 1, body).await.unwrap();
+        let response = client
+            .upload_part("test-key", "test-upload-id", 1, body)
+            .await
+            .unwrap();
 
         assert_eq!(response.etag, "\"part-etag-1\"");
     }
@@ -151,7 +154,7 @@ mod tests {
         ];
 
         let response = client
-            .complete_multipart_upload("test-upload-id", parts)
+            .complete_multipart_upload("test-key", "test-upload-id", parts)
             .await
             .unwrap();
 
