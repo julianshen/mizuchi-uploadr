@@ -13,7 +13,7 @@
 
 | Component               | Status         | Progress | PRs   | Tests      |
 | ----------------------- | -------------- | -------- | ----- | ---------- |
-| **Tracing**             | 🚧 In Progress | 75%      | 17/22 | ✅ Passing |
+| **Tracing**             | 🚧 In Progress | 80%      | 18/22 | ✅ Passing |
 | **Core Infrastructure** | ⏳ Not Started | 0%       | 0/9   | -          |
 | **Upload Operations**   | ⏳ Not Started | 0%       | 0/9   | -          |
 | **Authentication**      | ⏳ Not Started | 0%       | 0/9   | -          |
@@ -22,13 +22,13 @@
 
 ### Tracing Progress Detail
 
-| Phase                | Status         | PRs   | Tests       | Completion |
-| -------------------- | -------------- | ----- | ----------- | ---------- |
-| 1. Configuration     | ✅ Complete    | #4    | 8/8 passing | 100%       |
-| 2. OTel Integration  | ✅ Complete    | #5-16 | All passing | 100%       |
-| 3. Instrumentation   | ✅ Complete    | #13   | All passing | 100%       |
-| 4. Advanced Features | 🚧 In Progress | #17   | 5/5 passing | 25%        |
-| 5. Production Ready  | ⏳ Not Started | -     | 0/8         | 0%         |
+| Phase                | Status         | PRs    | Tests       | Completion |
+| -------------------- | -------------- | ------ | ----------- | ---------- |
+| 1. Configuration     | ✅ Complete    | #4     | 8/8 passing | 100%       |
+| 2. OTel Integration  | ✅ Complete    | #5-16  | All passing | 100%       |
+| 3. Instrumentation   | ✅ Complete    | #13    | All passing | 100%       |
+| 4. Advanced Features | 🚧 In Progress | #17-18 | 9/9 passing | 50%        |
+| 5. Production Ready  | ⏳ Not Started | -      | 0/8         | 0%         |
 
 ---
 
@@ -36,13 +36,14 @@
 
 ### 🔴 Immediate Priorities (This Week)
 
-#### 1. Complete Tracing Phase 4.2 - W3C Trace Context Extraction
+#### 1. ✅ Complete Tracing Phase 4.2 - W3C Trace Context Extraction
 
+- **Status**: ✅ COMPLETE (2025-12-25)
 - **Goal**: Extract traceparent from incoming HTTP requests
-- **Estimated**: 2-3 days
-- **Blocker**: None
+- **Completed**: Span linking with W3C Trace Context
 - **Impact**: Enables end-to-end distributed tracing
-- **Files**: `src/tracing/propagation.rs`, `src/server/tracing_middleware.rs`
+- **Files**: `src/tracing/instrumentation.rs`, `tests/context_propagation_test.rs`
+- **Commit**: 4d30ca3
 
 #### 2. Complete Tracing Phase 4.3 - Auth/AuthZ Tracing
 
