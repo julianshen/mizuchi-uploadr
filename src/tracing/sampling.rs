@@ -1,9 +1,90 @@
 //! Advanced Sampling Strategies
 //!
 //! Provides sophisticated sampling strategies beyond basic ratio sampling:
-//! - Error-based sampling: Always sample traces with errors
-//! - Slow request sampling: Sample requests exceeding duration threshold
-//! - Custom rules sampling: Sample based on path, method, attributes
+//! - **Error-based sampling**: Always sample traces with errors
+//! - **Slow request sampling**: Sample requests exceeding duration threshold
+//! - **Custom rules sampling**: Sample based on path, method, attributes
+//!
+//! # Overview
+//!
+//! This module implements advanced sampling strategies that go beyond simple
+//! ratio-based sampling. These strategies help you capture important traces
+//! while reducing overall sampling overhead.
+//!
+//! ## Sampling Strategies
+//!
+//! ### 1. Error-Based Sampling
+//!
+//! Always samples traces that contain errors, while using a lower base rate
+//! for successful requests. This ensures you never miss error traces.
+//!
+//! ```
+//! use mizuchi_uploadr::tracing::sampling::{ErrorBasedSampler, SamplingDecision};
+//!
+//! let sampler = ErrorBasedSampler::new(0.1); // 10% base rate
+//!
+//! // Error requests are always sampled
+//! assert_eq!(sampler.should_sample(true, 12345), SamplingDecision::Sample);
+//!
+//! // Successful requests use base rate (10%)
+//! let decision = sampler.should_sample(false, 12345);
+//! // Decision depends on trace ID hash
+//! ```
+//!
+//! ### 2. Slow Request Sampling
+//!
+//! Always samples requests that exceed a duration threshold, helping you
+//! identify performance issues.
+//!
+//! ```
+//! use mizuchi_uploadr::tracing::sampling::{SlowRequestSampler, SamplingDecision};
+//!
+//! let sampler = SlowRequestSampler::new(1000, 0.1); // 1000ms threshold, 10% base rate
+//!
+//! // Slow requests (>= 1000ms) are always sampled
+//! assert_eq!(sampler.should_sample(2000), SamplingDecision::Sample);
+//!
+//! // Fast requests use base rate (10%)
+//! let decision = sampler.should_sample(100);
+//! ```
+//!
+//! ### 3. Custom Rules Sampling
+//!
+//! Define custom sampling rules based on request path, HTTP method, and
+//! custom attributes. Rules are evaluated in order (first match wins).
+//!
+//! ```
+//! use mizuchi_uploadr::tracing::sampling::{AdvancedSampler, SamplingRule, SamplingDecision};
+//! use std::collections::HashMap;
+//!
+//! let mut sampler = AdvancedSampler::new(0.1); // 10% base rate
+//!
+//! // Rule 1: Always sample critical endpoints
+//! sampler.add_rule(
+//!     SamplingRule::new()
+//!         .with_path_pattern("/api/critical/*")
+//!         .with_sample_rate(1.0)
+//! );
+//!
+//! // Rule 2: Always sample premium users
+//! sampler.add_rule(
+//!     SamplingRule::new()
+//!         .with_attribute("user.tier", "premium")
+//!         .with_sample_rate(1.0)
+//! );
+//!
+//! let attributes = HashMap::new();
+//! let decision = sampler.should_sample("/api/critical/upload", "POST", &attributes);
+//! assert_eq!(decision, SamplingDecision::Sample);
+//! ```
+//!
+//! ## Best Practices
+//!
+//! 1. **Order matters**: Place more specific rules first in AdvancedSampler
+//! 2. **Error sampling**: Always use ErrorBasedSampler in production
+//! 3. **Performance**: Use SlowRequestSampler to catch performance regressions
+//! 4. **Critical paths**: Use custom rules to always sample critical endpoints
+//! 5. **Base rate**: Set a low base rate (1-10%) to reduce overhead
 
 use std::collections::HashMap;
 
@@ -275,5 +356,132 @@ impl AdvancedSampler {
                 SamplingDecision::Drop
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_sampler_always_samples_errors() {
+        let sampler = ErrorBasedSampler::new(0.0); // 0% base rate
+
+        // Errors should always be sampled regardless of base rate
+        assert_eq!(sampler.should_sample(true, 0), SamplingDecision::Sample);
+        assert_eq!(
+            sampler.should_sample(true, u64::MAX),
+            SamplingDecision::Sample
+        );
+    }
+
+    #[test]
+    fn test_error_sampler_respects_base_rate() {
+        let sampler = ErrorBasedSampler::new(1.0); // 100% base rate
+
+        // Success should be sampled with 100% rate
+        assert_eq!(sampler.should_sample(false, 0), SamplingDecision::Sample);
+        assert_eq!(
+            sampler.should_sample(false, u64::MAX),
+            SamplingDecision::Sample
+        );
+    }
+
+    #[test]
+    fn test_slow_sampler_always_samples_slow_requests() {
+        let sampler = SlowRequestSampler::new(1000, 0.0); // 1000ms threshold, 0% base rate
+
+        // Slow requests should always be sampled
+        assert_eq!(sampler.should_sample(1000), SamplingDecision::Sample);
+        assert_eq!(sampler.should_sample(2000), SamplingDecision::Sample);
+        assert_eq!(sampler.should_sample(u64::MAX), SamplingDecision::Sample);
+    }
+
+    #[test]
+    fn test_slow_sampler_respects_base_rate_for_fast_requests() {
+        let sampler = SlowRequestSampler::new(1000, 1.0); // 1000ms threshold, 100% base rate
+
+        // Fast requests should use base rate
+        assert_eq!(sampler.should_sample(0), SamplingDecision::Sample);
+        assert_eq!(sampler.should_sample(999), SamplingDecision::Sample);
+    }
+
+    #[test]
+    fn test_sampling_rule_wildcard_matching() {
+        let rule = SamplingRule::new()
+            .with_path_pattern("/api/v1/*")
+            .with_sample_rate(1.0);
+
+        assert!(rule.matches("/api/v1/users"));
+        assert!(rule.matches("/api/v1/posts"));
+        assert!(rule.matches("/api/v1/"));
+        assert!(!rule.matches("/api/v2/users"));
+        assert!(!rule.matches("/api/users"));
+    }
+
+    #[test]
+    fn test_sampling_rule_exact_matching() {
+        let rule = SamplingRule::new()
+            .with_path_pattern("/api/health")
+            .with_sample_rate(1.0);
+
+        assert!(rule.matches("/api/health"));
+        assert!(!rule.matches("/api/health/check"));
+        assert!(!rule.matches("/api/healthz"));
+    }
+
+    #[test]
+    fn test_sampling_rule_multiple_attributes() {
+        let rule = SamplingRule::new()
+            .with_attribute("user.tier", "premium")
+            .with_attribute("region", "us-east-1")
+            .with_sample_rate(1.0);
+
+        let mut attrs = HashMap::new();
+        attrs.insert("user.tier".to_string(), "premium".to_string());
+        attrs.insert("region".to_string(), "us-east-1".to_string());
+        assert!(rule.matches_attributes(&attrs));
+
+        // Missing one attribute
+        attrs.remove("region");
+        assert!(!rule.matches_attributes(&attrs));
+    }
+
+    #[test]
+    fn test_advanced_sampler_no_rules() {
+        let sampler = AdvancedSampler::new(1.0); // 100% base rate
+        let attrs = HashMap::new();
+
+        // Should use base rate when no rules match
+        assert_eq!(
+            sampler.should_sample("/any/path", "GET", &attrs),
+            SamplingDecision::Sample
+        );
+    }
+
+    #[test]
+    fn test_advanced_sampler_first_match_wins() {
+        let mut sampler = AdvancedSampler::new(0.0);
+
+        // First rule: sample /api/* at 100%
+        sampler.add_rule(
+            SamplingRule::new()
+                .with_path_pattern("/api/*")
+                .with_sample_rate(1.0),
+        );
+
+        // Second rule: sample /api/health at 0% (should not be used)
+        sampler.add_rule(
+            SamplingRule::new()
+                .with_path_pattern("/api/health")
+                .with_sample_rate(0.0),
+        );
+
+        let attrs = HashMap::new();
+        // First rule should match and sample
+        assert_eq!(
+            sampler.should_sample("/api/health", "GET", &attrs),
+            SamplingDecision::Sample
+        );
     }
 }
