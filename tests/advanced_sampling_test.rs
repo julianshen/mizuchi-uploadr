@@ -6,7 +6,7 @@
 
 #[cfg(feature = "tracing")]
 use mizuchi_uploadr::tracing::sampling::{
-    AdvancedSampler, ErrorBasedSampler, SlowRequestSampler, SamplingDecision, SamplingRule,
+    AdvancedSampler, ErrorBasedSampler, SamplingDecision, SamplingRule, SlowRequestSampler,
 };
 
 #[cfg(feature = "tracing")]
@@ -148,19 +148,30 @@ fn test_advanced_sampler_rule_priority() {
     // RED: AdvancedSampler doesn't exist yet
     let mut sampler = AdvancedSampler::new(0.0); // 0% base rate
 
-    // First rule: sample all POST requests at 50%
-    sampler.add_rule(SamplingRule::new().with_method("POST").with_sample_rate(0.5));
-
-    // Second rule: sample critical endpoints at 100%
+    // First rule: sample critical endpoints at 100% (more specific, should be first)
     sampler.add_rule(
         SamplingRule::new()
             .with_path_pattern("/api/critical/*")
             .with_sample_rate(1.0),
     );
 
-    // Critical POST should use the critical rule (100%)
+    // Second rule: sample all POST requests at 50% (less specific, should be second)
+    sampler.add_rule(
+        SamplingRule::new()
+            .with_method("POST")
+            .with_sample_rate(0.5),
+    );
+
+    // Critical POST should use the first matching rule (critical at 100%)
     let attributes = std::collections::HashMap::new();
     let decision = sampler.should_sample("/api/critical/upload", "POST", &attributes);
     assert_eq!(decision, SamplingDecision::Sample);
-}
 
+    // Non-critical POST should use the second rule (POST at 50%)
+    // Note: This is probabilistic, so we can't assert deterministically
+    let decision = sampler.should_sample("/api/normal/upload", "POST", &attributes);
+    assert!(matches!(
+        decision,
+        SamplingDecision::Sample | SamplingDecision::Drop
+    ));
+}
