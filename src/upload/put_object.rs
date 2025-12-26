@@ -35,9 +35,11 @@
 //! ```
 
 use super::{UploadError, UploadHandler, UploadResult};
+use crate::metrics;
 use crate::s3::S3Client;
 use async_trait::async_trait;
 use bytes::Bytes;
+use std::time::Instant;
 
 /// Simple upload handler
 ///
@@ -107,39 +109,62 @@ impl UploadHandler for PutObjectHandler {
         content_type: Option<&str>,
     ) -> Result<UploadResult, UploadError> {
         let bytes_written = body.len() as u64;
+        let start_time = Instant::now();
 
         // Use S3 client if available, otherwise use placeholder for legacy behavior
-        let etag = if let Some(client) = &self.client {
+        let upload_result = if let Some(client) = &self.client {
             // Real S3 upload via client
-            let response = client
+            client
                 .put_object(key, body, content_type)
                 .await
-                .map_err(|e| UploadError::S3Error(e.to_string()))?;
-
-            response.etag
+                .map(|response| response.etag)
+                .map_err(|e| UploadError::S3Error(e.to_string()))
         } else {
             // Legacy placeholder behavior (for backward compatibility with existing tests)
-            format!("\"{}\"", uuid::Uuid::new_v4())
+            Ok(format!("\"{}\"", uuid::Uuid::new_v4()))
         };
 
-        let result = UploadResult {
-            etag,
-            version_id: None,
-            bytes_written,
-        };
+        // Record metrics
+        let duration = start_time.elapsed();
+        metrics::record_upload_duration(bucket, "put_object", duration.as_secs_f64());
 
-        // Record result in span
-        let span = tracing::Span::current();
-        span.record("s3.etag", result.etag.as_str());
-        span.record("upload.bytes_written", bytes_written);
+        match upload_result {
+            Ok(etag) => {
+                metrics::record_upload_success(bucket, bytes_written);
 
-        tracing::info!(
-            etag = %result.etag,
-            bytes_written = bytes_written,
-            "PutObject upload completed"
-        );
+                let result = UploadResult {
+                    etag,
+                    version_id: None,
+                    bytes_written,
+                };
 
-        Ok(result)
+                // Record result in span
+                let span = tracing::Span::current();
+                span.record("s3.etag", result.etag.as_str());
+                span.record("upload.bytes_written", bytes_written);
+
+                tracing::info!(
+                    etag = %result.etag,
+                    bytes_written = bytes_written,
+                    duration_ms = duration.as_millis(),
+                    "PutObject upload completed"
+                );
+
+                Ok(result)
+            }
+            Err(e) => {
+                metrics::record_upload_failure(bucket);
+                metrics::record_error("s3_upload");
+
+                tracing::error!(
+                    error = %e,
+                    duration_ms = duration.as_millis(),
+                    "PutObject upload failed"
+                );
+
+                Err(e)
+            }
+        }
     }
 }
 
