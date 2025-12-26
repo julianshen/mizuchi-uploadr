@@ -70,8 +70,7 @@ async fn test_subscriber_has_multiple_layers() {
         tracing::info!("Test log message");
     }
 
-    // If we got here, test passed
-    assert!(true);
+    // Test passes if no panic occurs
 }
 
 /// Test that EnvFilter works correctly

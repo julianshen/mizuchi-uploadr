@@ -6,7 +6,7 @@
 //! Phase 2.1: Tracing Initialization Module (RED phase)
 
 use mizuchi_uploadr::config::{BatchConfig, OtlpConfig, SamplingConfig, TracingConfig};
-use mizuchi_uploadr::tracing::init::{init_tracing, shutdown_tracing, TracingGuard};
+use mizuchi_uploadr::tracing::init::{init_tracing, shutdown_tracing};
 
 #[test]
 fn test_init_tracing_with_valid_config() {

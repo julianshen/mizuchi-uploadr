@@ -73,7 +73,7 @@ cargo test  # All tests should PASS
 
 # 5. Run full test suite before commit
 cargo test --all-features
-cargo clippy -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --check
 
 # 6. Commit with meaningful message
@@ -98,7 +98,7 @@ git commit -m "feat(upload): add new capability
 Before any code is merged, it MUST pass:
 
 1. **All Tests Pass**: `cargo test --all-features`
-2. **No Clippy Warnings**: `cargo clippy -- -D warnings`
+2. **No Clippy Warnings**: `cargo clippy --all-targets --all-features -- -D warnings`
 3. **Formatted Code**: `cargo fmt --check`
 4. **Documentation**: `cargo doc --no-deps`
 5. **No Security Issues**: `cargo audit` (if available)

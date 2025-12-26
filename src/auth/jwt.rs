@@ -126,8 +126,8 @@ mod tests {
 
     #[test]
     fn test_jwt_authenticator_creation() {
+        // Test passes if construction doesn't panic
         let _auth = JwtAuthenticator::new_hs256("secret");
-        assert!(true); // Just verify it doesn't panic
     }
 
     #[tokio::test]

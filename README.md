@@ -118,7 +118,7 @@ cargo test
 cargo tarpaulin --out Html
 
 # Lint
-cargo clippy -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 
 # Format
 cargo fmt
