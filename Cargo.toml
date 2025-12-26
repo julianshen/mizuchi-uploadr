@@ -94,7 +94,7 @@ tokio-test = "0.4"
 wiremock = "0.6"
 
 # Test utilities
-fake = "2.9"
+fake = "4.4"
 rand = "0.9"
 serial_test = "3.0"
 
