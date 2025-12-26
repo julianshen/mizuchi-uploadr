@@ -57,9 +57,8 @@ mod tests {
         // Give time for any background export attempts
         sleep(Duration::from_millis(100)).await;
 
-        // Application should still be running
+        // Application should still be running (test passes if no panic)
         // TODO: When OTLP exporter is added, verify that export failures are logged
-        assert!(true, "Application continues to run");
     }
 
     /// Test: Network timeout doesn't block application
@@ -154,9 +153,8 @@ mod tests {
         // Wait for export attempts
         sleep(Duration::from_millis(500)).await;
 
-        // Application should still be running
+        // Application should still be running (test passes if no panic)
         // TODO: In GREEN phase, we'll verify that failures are logged
-        assert!(true, "Application continues despite export failures");
     }
 
     /// Test: Tracing can be disabled gracefully
@@ -177,7 +175,6 @@ mod tests {
 
         // These should be no-ops
         tracing::info!("This should not be exported");
-
-        assert!(true, "Application runs fine with tracing disabled");
+        // Test passes if no panic occurs
     }
 }

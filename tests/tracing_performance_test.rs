@@ -39,7 +39,7 @@ fn test_extract_trace_context_performance() {
     }
     let elapsed = start.elapsed();
 
-    let avg_nanos = elapsed.as_nanos() / iterations as u128;
+    let avg_nanos = elapsed.as_nanos() / iterations;
     println!("Average extract time: {}ns", avg_nanos);
 
     // Should be less than 3μs (3000ns) - realistic target for HashMap lookup + parsing

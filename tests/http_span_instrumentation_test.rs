@@ -21,9 +21,7 @@ mod tests {
         };
 
         let _span = create_http_span(&attrs);
-
-        // Span creation succeeds (function returns without panic)
-        assert!(true);
+        // Test passes if no panic occurs
     }
 
     /// Test that HTTP span includes semantic convention attributes
@@ -38,9 +36,7 @@ mod tests {
         };
 
         let _span = create_http_span(&attrs);
-
-        // Span creation succeeds
-        assert!(true);
+        // Test passes if no panic occurs
     }
 
     /// Test that trace context is extracted from headers
