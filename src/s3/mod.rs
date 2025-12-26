@@ -861,6 +861,65 @@ impl S3Client {
 
         Ok(S3CompleteMultipartUploadResponse { etag })
     }
+
+    /// Abort a multipart upload
+    #[tracing::instrument(
+        name = "s3.abort_multipart_upload",
+        skip(self),
+        fields(
+            s3.bucket = %self.config.bucket,
+            s3.key = %key,
+            s3.upload_id = %upload_id,
+            http.method = "DELETE",
+            http.status_code = tracing::field::Empty
+        ),
+        err
+    )]
+    pub async fn abort_multipart_upload(
+        &self,
+        key: &str,
+        upload_id: &str,
+    ) -> Result<(), S3ClientError> {
+        // Build the request URL with uploadId query parameter
+        let url = format!("{}/{}?uploadId={}", self.endpoint(), key, upload_id);
+
+        // Build DELETE request with trace context
+        let request = self.http_client.delete(&url);
+        let request = self.inject_trace_context(request);
+
+        // Send DELETE request
+        let response = request
+            .send()
+            .await
+            .map_err(|e| S3ClientError::RequestError(e.to_string()))?;
+
+        let status = response.status();
+
+        // Check for errors (204 No Content is success for abort)
+        if !status.is_success() {
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(S3ClientError::ResponseError(format!(
+                "HTTP {}: {}",
+                status.as_u16(),
+                error_body
+            )));
+        }
+
+        // Record response attributes in span
+        let span = tracing::Span::current();
+        span.record("http.status_code", status.as_u16());
+
+        tracing::info!(
+            upload_id = %upload_id,
+            status = status.as_u16(),
+            "AbortMultipartUpload completed"
+        );
+
+        Ok(())
+    }
 }
 
 /// S3 PutObject response
