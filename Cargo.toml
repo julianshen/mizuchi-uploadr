@@ -91,7 +91,7 @@ mockall = "0.12"
 predicates = "3.0"
 tempfile = "3.9"
 tokio-test = "0.4"
-wiremock = "0.5"
+wiremock = "0.6"
 
 # Test utilities
 fake = "2.9"
