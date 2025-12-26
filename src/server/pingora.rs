@@ -30,7 +30,15 @@
 //! use mizuchi_uploadr::server::pingora::PingoraServer;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let config = Config::default();
+//! let config = Config {
+//!     server: mizuchi_uploadr::config::ServerConfig {
+//!         address: "127.0.0.1:0".to_string(),
+//!         zero_copy: mizuchi_uploadr::config::ZeroCopyConfig::default(),
+//!     },
+//!     buckets: vec![],
+//!     metrics: mizuchi_uploadr::config::MetricsConfig::default(),
+//!     tracing: None,
+//! };
 //! let server = PingoraServer::new(config).await?;
 //! server.run().await?;
 //! # Ok(())
@@ -85,7 +93,15 @@ impl PingoraServer {
     /// # use mizuchi_uploadr::config::Config;
     /// # use mizuchi_uploadr::server::pingora::PingoraServer;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let config = Config::default();
+    /// let config = Config {
+    ///     server: mizuchi_uploadr::config::ServerConfig {
+    ///         address: "127.0.0.1:0".to_string(),
+    ///         zero_copy: mizuchi_uploadr::config::ZeroCopyConfig::default(),
+    ///     },
+    ///     buckets: vec![],
+    ///     metrics: mizuchi_uploadr::config::MetricsConfig::default(),
+    ///     tracing: None,
+    /// };
     /// let server = PingoraServer::new(config).await?;
     /// println!("Server bound to: {:?}", server.local_addr()?);
     /// # Ok(())
@@ -152,7 +168,15 @@ impl PingoraServer {
     /// # use mizuchi_uploadr::config::Config;
     /// # use mizuchi_uploadr::server::pingora::PingoraServer;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let config = Config::default();
+    /// let config = Config {
+    ///     server: mizuchi_uploadr::config::ServerConfig {
+    ///         address: "127.0.0.1:0".to_string(),
+    ///         zero_copy: mizuchi_uploadr::config::ZeroCopyConfig::default(),
+    ///     },
+    ///     buckets: vec![],
+    ///     metrics: mizuchi_uploadr::config::MetricsConfig::default(),
+    ///     tracing: None,
+    /// };
     /// let server = PingoraServer::new(config).await?;
     ///
     /// // This will run forever
