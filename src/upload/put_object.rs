@@ -1,33 +1,90 @@
 //! PutObject handler
 //!
 //! Handles simple object uploads (< multipart threshold).
+//!
+//! # Example
+//!
+//! ```no_run
+//! use mizuchi_uploadr::s3::{S3Client, S3ClientConfig};
+//! use mizuchi_uploadr::upload::put_object::PutObjectHandler;
+//! use mizuchi_uploadr::upload::UploadHandler;
+//! use bytes::Bytes;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create S3 client
+//! let config = S3ClientConfig {
+//!     bucket: "my-bucket".to_string(),
+//!     region: "us-east-1".to_string(),
+//!     endpoint: None,
+//!     access_key: Some("access-key".to_string()),
+//!     secret_key: Some("secret-key".to_string()),
+//!     retry: None,
+//!     timeout: None,
+//! };
+//! let s3_client = S3Client::new(config)?;
+//!
+//! // Create handler with S3 client
+//! let handler = PutObjectHandler::with_client(s3_client);
+//!
+//! // Upload a file
+//! let body = Bytes::from("Hello, World!");
+//! let result = handler.upload("my-bucket", "hello.txt", body, Some("text/plain")).await?;
+//! println!("Uploaded with ETag: {}", result.etag);
+//! # Ok(())
+//! # }
+//! ```
 
 use super::{UploadError, UploadHandler, UploadResult};
+use crate::s3::S3Client;
 use async_trait::async_trait;
 use bytes::Bytes;
 
 /// Simple upload handler
+///
+/// Handles single-part uploads for files under the multipart threshold (default 50MB).
+/// Uses an S3 client for actual uploads.
 pub struct PutObjectHandler {
-    // S3 client will be injected
+    /// S3 client for making upload requests
+    client: Option<S3Client>,
+    /// Bucket name (used when client is not provided)
     #[allow(dead_code)]
     bucket: String,
+    /// Region (used when client is not provided)
     #[allow(dead_code)]
     region: String,
 }
 
 impl PutObjectHandler {
-    /// Create a new PutObject handler
+    /// Create a new PutObject handler (legacy constructor)
+    ///
+    /// This constructor creates a handler without an S3 client.
+    /// Use `with_client` for production use.
     pub fn new(bucket: &str, region: &str) -> Self {
         Self {
+            client: None,
             bucket: bucket.to_string(),
             region: region.to_string(),
+        }
+    }
+
+    /// Create a new PutObject handler with an S3 client
+    ///
+    /// This is the preferred constructor for production use.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - Configured S3 client for making upload requests
+    pub fn with_client(client: S3Client) -> Self {
+        Self {
+            bucket: client.bucket().to_string(),
+            region: client.region().to_string(),
+            client: Some(client),
         }
     }
 }
 
 #[async_trait]
 impl UploadHandler for PutObjectHandler {
-    #[allow(unused_variables)] // content_type used in tracing instrumentation
     #[tracing::instrument(
         name = "upload.put_object",
         skip(self, body),
@@ -49,13 +106,24 @@ impl UploadHandler for PutObjectHandler {
         body: Bytes,
         content_type: Option<&str>,
     ) -> Result<UploadResult, UploadError> {
-        // TODO: Implement actual S3 upload
-        // This is a placeholder for TDD - tests will drive implementation
-
         let bytes_written = body.len() as u64;
 
+        // Use S3 client if available, otherwise use placeholder for legacy behavior
+        let etag = if let Some(client) = &self.client {
+            // Real S3 upload via client
+            let response = client
+                .put_object(key, body, content_type)
+                .await
+                .map_err(|e| UploadError::S3Error(e.to_string()))?;
+
+            response.etag
+        } else {
+            // Legacy placeholder behavior (for backward compatibility with existing tests)
+            format!("\"{}\"", uuid::Uuid::new_v4())
+        };
+
         let result = UploadResult {
-            etag: format!("\"{}\"", uuid::Uuid::new_v4()),
+            etag,
             version_id: None,
             bytes_written,
         };
