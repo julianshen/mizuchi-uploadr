@@ -40,6 +40,7 @@
 //! ```
 
 use super::{UploadError, UploadResult};
+use crate::metrics::{record_multipart_upload_failure, record_multipart_upload_success};
 use crate::s3::{S3Client, S3CompletedPart};
 use bytes::Bytes;
 
@@ -296,6 +297,9 @@ impl MultipartHandler {
                 "Completed multipart upload"
             );
 
+            // Record success metrics
+            record_multipart_upload_success(&upload.bucket, upload.parts.len());
+
             return Ok(result);
         }
 
@@ -314,6 +318,9 @@ impl MultipartHandler {
             parts = upload.parts.len(),
             "Completed multipart upload (legacy mode)"
         );
+
+        // Record success metrics (legacy mode)
+        record_multipart_upload_success(&upload.bucket, upload.parts.len());
 
         Ok(result)
     }
@@ -340,6 +347,9 @@ impl MultipartHandler {
                 "Aborted multipart upload"
             );
 
+            // Record abort as failure metrics
+            record_multipart_upload_failure(&upload.bucket);
+
             return Ok(());
         }
 
@@ -348,6 +358,9 @@ impl MultipartHandler {
             upload_id = %upload.upload_id,
             "Aborted multipart upload (legacy mode)"
         );
+
+        // Record abort as failure metrics (legacy mode)
+        record_multipart_upload_failure(&upload.bucket);
 
         Ok(())
     }

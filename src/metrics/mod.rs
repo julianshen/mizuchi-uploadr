@@ -102,6 +102,21 @@ pub fn record_error(error_type: &str) {
     ERRORS_TOTAL.with_label_values(&[error_type]).inc();
 }
 
+/// Record a successful multipart upload
+pub fn record_multipart_upload_success(bucket: &str, parts_count: usize) {
+    MULTIPART_UPLOADS
+        .with_label_values(&[bucket, "success"])
+        .inc();
+    MULTIPART_PARTS.observe(parts_count as f64);
+}
+
+/// Record a failed multipart upload
+pub fn record_multipart_upload_failure(bucket: &str) {
+    MULTIPART_UPLOADS
+        .with_label_values(&[bucket, "failure"])
+        .inc();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,6 +130,18 @@ mod tests {
     #[test]
     fn test_record_zero_copy() {
         record_zero_copy_transfer(65536);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_record_multipart_upload_success() {
+        record_multipart_upload_success("test-bucket", 5);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_record_multipart_upload_failure() {
+        record_multipart_upload_failure("test-bucket");
         // Just verify it doesn't panic
     }
 }
