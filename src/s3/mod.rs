@@ -26,6 +26,8 @@
 //!     endpoint: Some("http://localhost:9000".to_string()), // MinIO
 //!     access_key: Some("minioadmin".to_string()),
 //!     secret_key: Some("minioadmin".to_string()),
+//!     retry: None,   // Use default retry config (3 retries with exponential backoff)
+//!     timeout: None, // Use default timeouts (5s connect, 30s request)
 //! };
 //!
 //! let client = S3Client::new(config)?;
@@ -51,6 +53,8 @@
 //! #     endpoint: Some("http://localhost:9000".to_string()),
 //! #     access_key: Some("minioadmin".to_string()),
 //! #     secret_key: Some("minioadmin".to_string()),
+//! #     retry: None,
+//! #     timeout: None,
 //! # };
 //! let client = S3Client::new(config)?;
 //!
@@ -142,6 +146,48 @@ pub enum S3ClientError {
     SigningError(String),
 }
 
+/// Retry configuration for S3 operations
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts (default: 3)
+    pub max_retries: u32,
+    /// Initial backoff delay in milliseconds (default: 100ms)
+    pub initial_backoff_ms: u64,
+    /// Maximum backoff delay in milliseconds (default: 10000ms)
+    pub max_backoff_ms: u64,
+    /// Backoff multiplier (default: 2.0)
+    pub backoff_multiplier: f64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 10_000,
+            backoff_multiplier: 2.0,
+        }
+    }
+}
+
+/// Timeout configuration for S3 operations
+#[derive(Debug, Clone)]
+pub struct TimeoutConfig {
+    /// Connection timeout in milliseconds (default: 5000ms)
+    pub connect_timeout_ms: u64,
+    /// Request timeout in milliseconds (default: 30000ms)
+    pub request_timeout_ms: u64,
+}
+
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        Self {
+            connect_timeout_ms: 5_000,
+            request_timeout_ms: 30_000,
+        }
+    }
+}
+
 /// S3 Client configuration
 #[derive(Debug, Clone)]
 pub struct S3ClientConfig {
@@ -150,26 +196,61 @@ pub struct S3ClientConfig {
     pub endpoint: Option<String>,
     pub access_key: Option<String>,
     pub secret_key: Option<String>,
+    /// Retry configuration (optional, uses defaults if not specified)
+    pub retry: Option<RetryConfig>,
+    /// Timeout configuration (optional, uses defaults if not specified)
+    pub timeout: Option<TimeoutConfig>,
 }
 
 /// S3 Client
 pub struct S3Client {
     config: S3ClientConfig,
-    #[allow(dead_code)]
     http_client: reqwest::Client,
+    retry_config: RetryConfig,
 }
 
 impl S3Client {
     /// Create a new S3 client
     pub fn new(config: S3ClientConfig) -> Result<Self, S3ClientError> {
+        let timeout_config = config.timeout.clone().unwrap_or_default();
+        let retry_config = config.retry.clone().unwrap_or_default();
+
         let http_client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_millis(timeout_config.connect_timeout_ms))
+            .timeout(std::time::Duration::from_millis(timeout_config.request_timeout_ms))
             .build()
             .map_err(|e| S3ClientError::ConfigError(e.to_string()))?;
 
         Ok(Self {
             config,
             http_client,
+            retry_config,
         })
+    }
+
+    /// Check if an error is retryable
+    fn is_retryable_error(status: reqwest::StatusCode) -> bool {
+        // Retry on server errors and throttling
+        status.is_server_error() // 5xx
+            || status == reqwest::StatusCode::TOO_MANY_REQUESTS // 429
+            || status == reqwest::StatusCode::REQUEST_TIMEOUT // 408
+    }
+
+    /// Calculate backoff delay for a retry attempt
+    fn calculate_backoff(&self, attempt: u32) -> std::time::Duration {
+        let delay_ms = (self.retry_config.initial_backoff_ms as f64
+            * self.retry_config.backoff_multiplier.powi(attempt as i32))
+            .min(self.retry_config.max_backoff_ms as f64) as u64;
+
+        std::time::Duration::from_millis(delay_ms)
+    }
+
+    /// Compute SHA256 hash of body for x-amz-content-sha256 header
+    fn compute_content_hash(body: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(body);
+        hex::encode(hasher.finalize())
     }
 
     /// Get the bucket name
@@ -360,6 +441,8 @@ impl S3Client {
     /// #     endpoint: None,
     /// #     access_key: None,
     /// #     secret_key: None,
+    /// #     retry: None,
+    /// #     timeout: None,
     /// # };
     /// let client = S3Client::new(config)?;
     /// let body = Bytes::from("Hello, World!");
@@ -400,9 +483,13 @@ impl S3Client {
         // Build the request URL
         let url = format!("{}/{}", self.endpoint(), key);
 
-        // Build headers list for signing
+        // Compute content hash for x-amz-content-sha256
+        let content_hash = Self::compute_content_hash(&body);
+
+        // Build headers list for signing (including content hash)
         let mut headers = vec![
             ("host".to_string(), self.get_host()),
+            ("x-amz-content-sha256".to_string(), content_hash.clone()),
         ];
         if let Some(ct) = content_type {
             headers.push(("content-type".to_string(), ct.to_string()));
@@ -415,63 +502,123 @@ impl S3Client {
             vec![]
         };
 
-        // Build the HTTP request
-        let mut request = self.http_client.put(&url).body(body);
+        // Retry loop with exponential backoff
+        let mut last_error = None;
+        for attempt in 0..=self.retry_config.max_retries {
+            if attempt > 0 {
+                // Backoff before retry
+                let backoff = self.calculate_backoff(attempt - 1);
+                tracing::debug!(
+                    attempt = attempt,
+                    backoff_ms = backoff.as_millis(),
+                    "Retrying S3 PutObject after backoff"
+                );
+                tokio::time::sleep(backoff).await;
+            }
 
-        // Add Content-Type header if provided
-        if let Some(ct) = content_type {
-            request = request.header("Content-Type", ct);
+            // Build the HTTP request (need to rebuild each time for retry)
+            let mut request = self.http_client.put(&url).body(body.clone());
+
+            // Add Content-Type header if provided
+            if let Some(ct) = content_type {
+                request = request.header("Content-Type", ct);
+            }
+
+            // Add x-amz-content-sha256 header
+            request = request.header("x-amz-content-sha256", &content_hash);
+
+            // Add signed headers (Authorization, x-amz-date, etc.)
+            for (name, value) in &signed_headers {
+                request = request.header(name, value);
+            }
+
+            // Inject W3C Trace Context
+            request = self.inject_trace_context(request);
+
+            // Send the request
+            let result = request.send().await;
+
+            match result {
+                Ok(response) => {
+                    let status = response.status();
+
+                    if status.is_success() {
+                        // Success - extract ETag and return
+                        let etag = response
+                            .headers()
+                            .get("ETag")
+                            .and_then(|v| v.to_str().ok())
+                            .ok_or_else(|| {
+                                S3ClientError::ResponseError("Missing ETag header".to_string())
+                            })?
+                            .to_string();
+
+                        // Record response attributes in span
+                        let span = tracing::Span::current();
+                        span.record("s3.etag", etag.as_str());
+                        span.record("http.status_code", status.as_u16());
+
+                        tracing::info!(
+                            etag = %etag,
+                            status = status.as_u16(),
+                            attempts = attempt + 1,
+                            "PutObject completed"
+                        );
+
+                        return Ok(S3PutObjectResponse { etag });
+                    }
+
+                    // Check if error is retryable
+                    if Self::is_retryable_error(status) && attempt < self.retry_config.max_retries {
+                        let error_body = response
+                            .text()
+                            .await
+                            .unwrap_or_else(|_| "Unknown error".to_string());
+                        tracing::warn!(
+                            status = status.as_u16(),
+                            attempt = attempt + 1,
+                            error = %error_body,
+                            "Retryable S3 error, will retry"
+                        );
+                        last_error = Some(S3ClientError::ResponseError(format!(
+                            "HTTP {}: {}",
+                            status.as_u16(),
+                            error_body
+                        )));
+                        continue;
+                    }
+
+                    // Non-retryable error
+                    let error_body = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    return Err(S3ClientError::ResponseError(format!(
+                        "HTTP {}: {}",
+                        status.as_u16(),
+                        error_body
+                    )));
+                }
+                Err(e) => {
+                    // Network error - these are typically retryable
+                    if attempt < self.retry_config.max_retries {
+                        tracing::warn!(
+                            attempt = attempt + 1,
+                            error = %e,
+                            "Network error, will retry"
+                        );
+                        last_error = Some(S3ClientError::RequestError(e.to_string()));
+                        continue;
+                    }
+                    return Err(S3ClientError::RequestError(e.to_string()));
+                }
+            }
         }
 
-        // Add signed headers (Authorization, x-amz-date, etc.)
-        for (name, value) in signed_headers {
-            request = request.header(name, value);
-        }
-
-        // Inject W3C Trace Context
-        request = self.inject_trace_context(request);
-
-        // Send the request
-        let response = request
-            .send()
-            .await
-            .map_err(|e| S3ClientError::RequestError(e.to_string()))?;
-
-        let status = response.status();
-
-        // Check for errors
-        if !status.is_success() {
-            let error_body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(S3ClientError::ResponseError(format!(
-                "HTTP {}: {}",
-                status.as_u16(),
-                error_body
-            )));
-        }
-
-        // Extract ETag from response headers
-        let etag = response
-            .headers()
-            .get("ETag")
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| S3ClientError::ResponseError("Missing ETag header".to_string()))?
-            .to_string();
-
-        // Record response attributes in span
-        let span = tracing::Span::current();
-        span.record("s3.etag", etag.as_str());
-        span.record("http.status_code", status.as_u16());
-
-        tracing::info!(
-            etag = %etag,
-            status = status.as_u16(),
-            "PutObject completed"
-        );
-
-        Ok(S3PutObjectResponse { etag })
+        // If we get here, all retries failed
+        Err(last_error.unwrap_or_else(|| {
+            S3ClientError::RequestError("All retries exhausted".to_string())
+        }))
     }
 
     /// Create a multipart upload
@@ -759,6 +906,8 @@ mod tests {
             endpoint: None,
             access_key: None,
             secret_key: None,
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
@@ -774,6 +923,8 @@ mod tests {
             endpoint: None,
             access_key: None,
             secret_key: None,
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
@@ -788,10 +939,114 @@ mod tests {
             endpoint: Some("http://localhost:9000".into()),
             access_key: None,
             secret_key: None,
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
         assert_eq!(client.endpoint(), "http://localhost:9000");
+    }
+
+    #[test]
+    fn test_retry_config_defaults() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_retries, 3);
+        assert_eq!(config.initial_backoff_ms, 100);
+        assert_eq!(config.max_backoff_ms, 10_000);
+        assert!((config.backoff_multiplier - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_timeout_config_defaults() {
+        let config = TimeoutConfig::default();
+        assert_eq!(config.connect_timeout_ms, 5_000);
+        assert_eq!(config.request_timeout_ms, 30_000);
+    }
+
+    #[test]
+    fn test_custom_retry_config() {
+        let config = S3ClientConfig {
+            bucket: "test-bucket".into(),
+            region: "us-east-1".into(),
+            endpoint: None,
+            access_key: None,
+            secret_key: None,
+            retry: Some(RetryConfig {
+                max_retries: 5,
+                initial_backoff_ms: 200,
+                max_backoff_ms: 20_000,
+                backoff_multiplier: 3.0,
+            }),
+            timeout: None,
+        };
+
+        let client = S3Client::new(config).unwrap();
+        assert_eq!(client.retry_config.max_retries, 5);
+        assert_eq!(client.retry_config.initial_backoff_ms, 200);
+    }
+
+    #[test]
+    fn test_is_retryable_error() {
+        use reqwest::StatusCode;
+
+        // 5xx errors are retryable
+        assert!(S3Client::is_retryable_error(StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(S3Client::is_retryable_error(StatusCode::BAD_GATEWAY));
+        assert!(S3Client::is_retryable_error(StatusCode::SERVICE_UNAVAILABLE));
+
+        // 429 Too Many Requests is retryable
+        assert!(S3Client::is_retryable_error(StatusCode::TOO_MANY_REQUESTS));
+
+        // 408 Request Timeout is retryable
+        assert!(S3Client::is_retryable_error(StatusCode::REQUEST_TIMEOUT));
+
+        // 4xx errors (except 408, 429) are not retryable
+        assert!(!S3Client::is_retryable_error(StatusCode::BAD_REQUEST));
+        assert!(!S3Client::is_retryable_error(StatusCode::NOT_FOUND));
+        assert!(!S3Client::is_retryable_error(StatusCode::FORBIDDEN));
+    }
+
+    #[test]
+    fn test_content_hash_computation() {
+        // Empty body
+        let hash = S3Client::compute_content_hash(b"");
+        assert_eq!(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+
+        // "hello" - known SHA256 hash
+        let hash = S3Client::compute_content_hash(b"hello");
+        assert_eq!(hash, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+    }
+
+    #[test]
+    fn test_calculate_backoff() {
+        let config = S3ClientConfig {
+            bucket: "test".into(),
+            region: "us-east-1".into(),
+            endpoint: None,
+            access_key: None,
+            secret_key: None,
+            retry: Some(RetryConfig {
+                max_retries: 5,
+                initial_backoff_ms: 100,
+                max_backoff_ms: 10_000,
+                backoff_multiplier: 2.0,
+            }),
+            timeout: None,
+        };
+
+        let client = S3Client::new(config).unwrap();
+
+        // Attempt 0: 100ms * 2^0 = 100ms
+        assert_eq!(client.calculate_backoff(0), std::time::Duration::from_millis(100));
+
+        // Attempt 1: 100ms * 2^1 = 200ms
+        assert_eq!(client.calculate_backoff(1), std::time::Duration::from_millis(200));
+
+        // Attempt 2: 100ms * 2^2 = 400ms
+        assert_eq!(client.calculate_backoff(2), std::time::Duration::from_millis(400));
+
+        // High attempt should cap at max_backoff_ms
+        assert_eq!(client.calculate_backoff(10), std::time::Duration::from_millis(10_000));
     }
 
     // Note: HTTP integration tests are in tests/s3_http_api_test.rs

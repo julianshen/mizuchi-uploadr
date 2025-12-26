@@ -101,6 +101,8 @@ impl S3ClientPool {
                 endpoint: bucket_config.s3.endpoint.clone(),
                 access_key: Some(credentials.access_key_id().to_string()),
                 secret_key: Some(credentials.secret_access_key().to_string()),
+                retry: None,    // Use defaults
+                timeout: None,  // Use defaults
             };
 
             // Create client

@@ -16,6 +16,8 @@ mod tests {
             endpoint: Some("http://localhost:9000".to_string()),
             access_key: Some("test-key".to_string()),
             secret_key: Some("test-secret".to_string()),
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
@@ -40,6 +42,8 @@ mod tests {
             endpoint: Some("http://localhost:9000".to_string()),
             access_key: Some("test-key".to_string()),
             secret_key: Some("test-secret".to_string()),
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
@@ -71,6 +75,8 @@ mod tests {
             endpoint: Some("http://localhost:9000".to_string()),
             access_key: Some("test-key".to_string()),
             secret_key: Some("test-secret".to_string()),
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
@@ -91,6 +97,8 @@ mod tests {
             endpoint: Some("http://localhost:9000".to_string()),
             access_key: Some("test-key".to_string()),
             secret_key: Some("test-secret".to_string()),
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
@@ -114,6 +122,8 @@ mod tests {
             endpoint: Some("http://localhost:9000".to_string()),
             access_key: Some("test-key".to_string()),
             secret_key: Some("test-secret".to_string()),
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
@@ -137,6 +147,8 @@ mod tests {
             endpoint: Some("http://localhost:9000".to_string()),
             access_key: Some("test-key".to_string()),
             secret_key: Some("test-secret".to_string()),
+            retry: None,
+            timeout: None,
         };
 
         let client = S3Client::new(config).unwrap();
