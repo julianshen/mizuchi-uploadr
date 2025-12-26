@@ -1,7 +1,9 @@
 //! S3 API Router
 //!
 //! Parses incoming requests and routes them to appropriate handlers.
+//! Provides bucket resolution to map path prefixes to S3 bucket configurations.
 
+use crate::config::{BucketConfig, Config};
 use thiserror::Error;
 
 /// Router errors
@@ -21,15 +23,9 @@ pub enum RouterError {
 #[derive(Debug, Clone, PartialEq)]
 pub enum S3Operation {
     /// PUT /{bucket}/{key}
-    PutObject {
-        bucket: String,
-        key: String,
-    },
+    PutObject { bucket: String, key: String },
     /// POST /{bucket}/{key}?uploads
-    CreateMultipartUpload {
-        bucket: String,
-        key: String,
-    },
+    CreateMultipartUpload { bucket: String, key: String },
     /// PUT /{bucket}/{key}?partNumber=N&uploadId=X
     UploadPart {
         bucket: String,
@@ -85,10 +81,9 @@ impl S3RequestParser {
 
         match method {
             "PUT" => {
-                if let (Some(part_number), Some(upload_id)) = (
-                    query_params.get("partNumber"),
-                    query_params.get("uploadId"),
-                ) {
+                if let (Some(part_number), Some(upload_id)) =
+                    (query_params.get("partNumber"), query_params.get("uploadId"))
+                {
                     Ok(S3Operation::UploadPart {
                         bucket,
                         key,
@@ -190,9 +185,8 @@ mod tests {
 
     #[test]
     fn test_parse_upload_part() {
-        let op =
-            S3RequestParser::parse("PUT", "/bucket/key", Some("partNumber=1&uploadId=abc123"))
-                .unwrap();
+        let op = S3RequestParser::parse("PUT", "/bucket/key", Some("partNumber=1&uploadId=abc123"))
+            .unwrap();
         assert_eq!(
             op,
             S3Operation::UploadPart {
@@ -208,5 +202,34 @@ mod tests {
     fn test_parse_get_not_allowed() {
         let result = S3RequestParser::parse("GET", "/bucket/key", None);
         assert!(result.is_err());
+    }
+}
+
+/// Bucket Resolver
+///
+/// Maps incoming request paths to configured S3 buckets.
+/// RED Phase: Stub implementation - tests will fail.
+pub struct BucketResolver;
+
+impl BucketResolver {
+    /// Create a new bucket resolver from configuration
+    pub fn new(_config: &Config) -> Self {
+        // RED Phase: Stub implementation
+        Self
+    }
+
+    /// Resolve a path to a bucket configuration
+    pub fn resolve_bucket(&self, _path: &str) -> Result<&BucketConfig, RouterError> {
+        // RED Phase: Always fail - implementation in GREEN phase
+        Err(RouterError::BucketNotFound("Not implemented".into()))
+    }
+
+    /// Resolve a path to a bucket configuration and extract the S3 key
+    pub fn resolve_bucket_and_key(
+        &self,
+        _path: &str,
+    ) -> Result<(&BucketConfig, String), RouterError> {
+        // RED Phase: Always fail - implementation in GREEN phase
+        Err(RouterError::BucketNotFound("Not implemented".into()))
     }
 }
