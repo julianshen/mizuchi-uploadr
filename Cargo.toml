@@ -81,7 +81,7 @@ quick-xml = { version = "0.38.4", features = ["serialize"] }
 
 # Linux-specific (zero-copy)
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = {version = "0.27", features = ["fs", "uio", "zerocopy"]}
+nix = {version = "0.30", features = ["fs", "uio", "zerocopy"]}
 
 [dev-dependencies]
 # Testing
