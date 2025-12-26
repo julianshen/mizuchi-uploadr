@@ -83,6 +83,14 @@ impl PutObjectHandler {
             client: Some(client),
         }
     }
+
+    /// Check if zero-copy transfer is supported on this platform
+    ///
+    /// Returns `true` on Linux where splice(2)/sendfile(2) are available,
+    /// `false` on other platforms that use buffered I/O fallback.
+    pub fn supports_zero_copy(&self) -> bool {
+        crate::upload::zero_copy::is_available()
+    }
 }
 
 #[async_trait]
