@@ -2,8 +2,14 @@
 //!
 //! Parses incoming requests and routes them to appropriate handlers.
 //! Provides bucket resolution to map path prefixes to S3 bucket configurations.
+//!
+//! # Performance
+//!
+//! The `BucketResolver` uses a HashMap for O(1) average-case lookup performance.
+//! Path prefixes are normalized and stored as keys for fast resolution.
 
 use crate::config::{BucketConfig, Config};
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Router errors
@@ -155,6 +161,244 @@ impl S3RequestParser {
     }
 }
 
+/// Bucket Resolver
+///
+/// Maps incoming request paths to configured S3 buckets using a HashMap for O(1) lookup.
+///
+/// # Performance
+///
+/// Uses a HashMap to map path prefixes to bucket configurations, providing O(1)
+/// average-case lookup performance instead of O(n) linear search.
+///
+/// # Example
+///
+/// ```
+/// use mizuchi_uploadr::config::{Config, BucketConfig, S3Config, ServerConfig, ZeroCopyConfig, AuthConfig, UploadConfig, MetricsConfig};
+/// use mizuchi_uploadr::router::BucketResolver;
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create a test configuration
+/// let config = Config {
+///     server: ServerConfig {
+///         address: "127.0.0.1:8080".to_string(),
+///         zero_copy: ZeroCopyConfig::default(),
+///     },
+///     buckets: vec![
+///         BucketConfig {
+///             name: "uploads".to_string(),
+///             path_prefix: "/uploads".to_string(),
+///             s3: S3Config {
+///                 bucket: "my-bucket".to_string(),
+///                 region: "us-east-1".to_string(),
+///                 endpoint: None,
+///                 access_key: None,
+///                 secret_key: None,
+///             },
+///             auth: AuthConfig::default(),
+///             upload: UploadConfig::default(),
+///         },
+///     ],
+///     metrics: MetricsConfig::default(),
+///     tracing: None,
+/// };
+///
+/// let resolver = BucketResolver::new(&config);
+///
+/// // Resolve a path to a bucket configuration
+/// let bucket = resolver.resolve_bucket("/uploads/file.txt")?;
+/// println!("Bucket: {}", bucket.name);
+///
+/// // Resolve and extract S3 key
+/// let (bucket, key) = resolver.resolve_bucket_and_key("/uploads/folder/file.txt")?;
+/// println!("Bucket: {}, Key: {}", bucket.name, key);
+/// # Ok(())
+/// # }
+/// ```
+pub struct BucketResolver {
+    /// HashMap mapping path prefixes to bucket configurations
+    /// Key: normalized path prefix (e.g., "/uploads")
+    /// Value: bucket configuration
+    prefix_map: HashMap<String, BucketConfig>,
+}
+
+impl BucketResolver {
+    /// Create a new bucket resolver from configuration
+    ///
+    /// Builds a HashMap from the bucket configurations for fast O(1) lookup.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Application configuration containing bucket definitions
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use mizuchi_uploadr::config::{Config, BucketConfig, S3Config, ServerConfig, ZeroCopyConfig, AuthConfig, UploadConfig, MetricsConfig};
+    /// # use mizuchi_uploadr::router::BucketResolver;
+    /// # let config = Config {
+    /// #     server: ServerConfig { address: "127.0.0.1:8080".to_string(), zero_copy: ZeroCopyConfig::default() },
+    /// #     buckets: vec![],
+    /// #     metrics: MetricsConfig::default(),
+    /// #     tracing: None,
+    /// # };
+    /// let resolver = BucketResolver::new(&config);
+    /// ```
+    pub fn new(config: &Config) -> Self {
+        let mut prefix_map = HashMap::new();
+
+        for bucket in &config.buckets {
+            // Normalize prefix (ensure it starts with / and doesn't end with /)
+            let normalized_prefix = Self::normalize_prefix(&bucket.path_prefix);
+            prefix_map.insert(normalized_prefix, bucket.clone());
+        }
+
+        Self { prefix_map }
+    }
+
+    /// Normalize a path prefix
+    ///
+    /// Ensures the prefix starts with / and doesn't end with / (unless it's just "/")
+    fn normalize_prefix(prefix: &str) -> String {
+        let mut normalized = prefix.to_string();
+
+        // Ensure starts with /
+        if !normalized.starts_with('/') {
+            normalized.insert(0, '/');
+        }
+
+        // Remove trailing / (unless it's the root)
+        if normalized.len() > 1 && normalized.ends_with('/') {
+            normalized.pop();
+        }
+
+        normalized
+    }
+
+    /// Extract the first path segment from a path
+    ///
+    /// Used to determine which bucket prefix to look up.
+    fn extract_first_segment(path: &str) -> Option<String> {
+        let trimmed = path.trim_start_matches('/');
+        trimmed.split('/').next().map(|s| format!("/{}", s))
+    }
+
+    /// Resolve a path to a bucket configuration
+    ///
+    /// Looks up the bucket configuration based on the path prefix using O(1) HashMap lookup.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The request path (e.g., "/uploads/file.txt")
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(&BucketConfig)` - The matching bucket configuration
+    /// * `Err(RouterError)` - If no bucket matches or path is invalid
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use mizuchi_uploadr::config::{Config, BucketConfig, S3Config, ServerConfig, ZeroCopyConfig, AuthConfig, UploadConfig, MetricsConfig};
+    /// # use mizuchi_uploadr::router::BucketResolver;
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let config = Config {
+    /// #     server: ServerConfig { address: "127.0.0.1:8080".to_string(), zero_copy: ZeroCopyConfig::default() },
+    /// #     buckets: vec![
+    /// #         BucketConfig {
+    /// #             name: "uploads".to_string(),
+    /// #             path_prefix: "/uploads".to_string(),
+    /// #             s3: S3Config { bucket: "my-bucket".to_string(), region: "us-east-1".to_string(), endpoint: None, access_key: None, secret_key: None },
+    /// #             auth: AuthConfig::default(),
+    /// #             upload: UploadConfig::default(),
+    /// #         },
+    /// #     ],
+    /// #     metrics: MetricsConfig::default(),
+    /// #     tracing: None,
+    /// # };
+    /// let resolver = BucketResolver::new(&config);
+    /// let bucket = resolver.resolve_bucket("/uploads/file.txt")?;
+    /// assert_eq!(bucket.name, "uploads");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn resolve_bucket(&self, path: &str) -> Result<&BucketConfig, RouterError> {
+        // Handle empty or root path
+        if path.is_empty() || path == "/" {
+            return Err(RouterError::InvalidPath("Empty or root path".into()));
+        }
+
+        // Normalize path (ensure it starts with /)
+        if !path.starts_with('/') {
+            return Err(RouterError::InvalidPath("Path must start with /".into()));
+        }
+
+        // Extract first segment and look up in HashMap
+        let first_segment = Self::extract_first_segment(path)
+            .ok_or_else(|| RouterError::InvalidPath("Invalid path format".into()))?;
+
+        self.prefix_map.get(&first_segment).ok_or_else(|| {
+            RouterError::BucketNotFound(format!(
+                "No bucket configured for path prefix: {}",
+                first_segment
+            ))
+        })
+    }
+
+    /// Resolve a path to a bucket configuration and extract the S3 key
+    ///
+    /// Combines bucket resolution with S3 key extraction in one operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The request path (e.g., "/uploads/folder/file.txt")
+    ///
+    /// # Returns
+    ///
+    /// * `Ok((&BucketConfig, String))` - The bucket config and extracted S3 key
+    /// * `Err(RouterError)` - If no bucket matches or path is invalid
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use mizuchi_uploadr::config::{Config, BucketConfig, S3Config, ServerConfig, ZeroCopyConfig, AuthConfig, UploadConfig, MetricsConfig};
+    /// # use mizuchi_uploadr::router::BucketResolver;
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let config = Config {
+    /// #     server: ServerConfig { address: "127.0.0.1:8080".to_string(), zero_copy: ZeroCopyConfig::default() },
+    /// #     buckets: vec![
+    /// #         BucketConfig {
+    /// #             name: "uploads".to_string(),
+    /// #             path_prefix: "/uploads".to_string(),
+    /// #             s3: S3Config { bucket: "my-bucket".to_string(), region: "us-east-1".to_string(), endpoint: None, access_key: None, secret_key: None },
+    /// #             auth: AuthConfig::default(),
+    /// #             upload: UploadConfig::default(),
+    /// #         },
+    /// #     ],
+    /// #     metrics: MetricsConfig::default(),
+    /// #     tracing: None,
+    /// # };
+    /// let resolver = BucketResolver::new(&config);
+    /// let (bucket, key) = resolver.resolve_bucket_and_key("/uploads/folder/file.txt")?;
+    /// assert_eq!(bucket.name, "uploads");
+    /// assert_eq!(key, "folder/file.txt");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn resolve_bucket_and_key(
+        &self,
+        path: &str,
+    ) -> Result<(&BucketConfig, String), RouterError> {
+        let bucket = self.resolve_bucket(path)?;
+
+        // Extract the S3 key (path after bucket prefix)
+        let key = path[bucket.path_prefix.len()..]
+            .trim_start_matches('/')
+            .to_string();
+
+        Ok((bucket, key))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,75 +446,5 @@ mod tests {
     fn test_parse_get_not_allowed() {
         let result = S3RequestParser::parse("GET", "/bucket/key", None);
         assert!(result.is_err());
-    }
-}
-
-/// Bucket Resolver
-///
-/// Maps incoming request paths to configured S3 buckets.
-/// GREEN Phase: Minimal implementation using linear search.
-pub struct BucketResolver {
-    buckets: Vec<BucketConfig>,
-}
-
-impl BucketResolver {
-    /// Create a new bucket resolver from configuration
-    pub fn new(config: &Config) -> Self {
-        Self {
-            buckets: config.buckets.clone(),
-        }
-    }
-
-    /// Resolve a path to a bucket configuration
-    pub fn resolve_bucket(&self, path: &str) -> Result<&BucketConfig, RouterError> {
-        // Handle empty or root path
-        if path.is_empty() || path == "/" {
-            return Err(RouterError::InvalidPath("Empty or root path".into()));
-        }
-
-        // Normalize path (ensure it starts with /)
-        let normalized_path = if path.starts_with('/') {
-            path
-        } else {
-            return Err(RouterError::InvalidPath("Path must start with /".into()));
-        };
-
-        // Find matching bucket by path prefix
-        for bucket in &self.buckets {
-            if normalized_path.starts_with(&bucket.path_prefix) {
-                // Ensure it's a proper prefix match (not just substring)
-                let after_prefix = &normalized_path[bucket.path_prefix.len()..];
-                if after_prefix.is_empty() || after_prefix.starts_with('/') {
-                    return Ok(bucket);
-                }
-            }
-        }
-
-        // Extract the first path segment for error message
-        let first_segment = normalized_path
-            .trim_start_matches('/')
-            .split('/')
-            .next()
-            .unwrap_or("unknown");
-
-        Err(RouterError::BucketNotFound(format!(
-            "No bucket configured for path prefix: /{}",
-            first_segment
-        )))
-    }
-
-    /// Resolve a path to a bucket configuration and extract the S3 key
-    pub fn resolve_bucket_and_key(
-        &self,
-        path: &str,
-    ) -> Result<(&BucketConfig, String), RouterError> {
-        let bucket = self.resolve_bucket(path)?;
-
-        // Extract the S3 key (path after bucket prefix)
-        let key = path[bucket.path_prefix.len()..]
-            .trim_start_matches('/')
-            .to_string();
-
-        Ok((bucket, key))
     }
 }
