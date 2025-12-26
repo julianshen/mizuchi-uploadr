@@ -545,7 +545,7 @@ All tasks follow the Red-Green-Refactor cycle:
 Each task must pass:
 
 - [ ] All tests pass: `cargo test --all-features`
-- [ ] No Clippy warnings: `cargo clippy -- -D warnings`
+- [ ] No Clippy warnings: `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] Code formatted: `cargo fmt --check`
 - [ ] Documentation updated: `cargo doc --no-deps`
 

@@ -10,7 +10,9 @@
 //! - Graceful shutdown
 //!
 
-use mizuchi_uploadr::config::{BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, ZeroCopyConfig};
+use mizuchi_uploadr::config::{
+    BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, ZeroCopyConfig,
+};
 use mizuchi_uploadr::server::pingora::PingoraServer;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -46,16 +48,18 @@ fn test_config(port: u16) -> Config {
 #[tokio::test]
 async fn test_server_binds_to_configured_address() {
     let config = test_config(0); // Port 0 = OS assigns random port
-    
+
     // Create server instance
-    let server = PingoraServer::new(config).expect("Failed to create server");
-    
+    let server = PingoraServer::new(config)
+        .await
+        .expect("Failed to create server");
+
     // Get the actual bound address
     let addr = server.local_addr().expect("Failed to get local address");
-    
+
     // Verify it's bound to localhost
     assert_eq!(addr.ip().to_string(), "127.0.0.1");
-    
+
     // Verify port was assigned
     assert!(addr.port() > 0, "Port should be assigned");
 }
@@ -66,17 +70,17 @@ async fn test_server_binds_to_configured_address() {
 #[tokio::test]
 async fn test_server_health_check_endpoint() {
     let config = test_config(0);
-    let server = PingoraServer::new(config).expect("Failed to create server");
+    let server = PingoraServer::new(config)
+        .await
+        .expect("Failed to create server");
     let addr = server.local_addr().expect("Failed to get local address");
-    
+
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
-    
+    let server_handle = tokio::spawn(async move { server.run().await });
+
     // Give server time to start
     sleep(Duration::from_millis(100)).await;
-    
+
     // Make HTTP request to health check endpoint
     let client = reqwest::Client::new();
     let response = client
@@ -84,13 +88,16 @@ async fn test_server_health_check_endpoint() {
         .send()
         .await
         .expect("Failed to send request");
-    
+
     // Verify response
     assert_eq!(response.status(), 200, "Health check should return 200 OK");
-    
+
     let body = response.text().await.expect("Failed to read response body");
-    assert!(body.contains("ok") || body.contains("healthy"), "Health check should return ok/healthy");
-    
+    assert!(
+        body.contains("ok") || body.contains("healthy"),
+        "Health check should return ok/healthy"
+    );
+
     // Shutdown server
     server_handle.abort();
 }
@@ -101,17 +108,17 @@ async fn test_server_health_check_endpoint() {
 #[tokio::test]
 async fn test_server_handles_basic_http_requests() {
     let config = test_config(0);
-    let server = PingoraServer::new(config).expect("Failed to create server");
+    let server = PingoraServer::new(config)
+        .await
+        .expect("Failed to create server");
     let addr = server.local_addr().expect("Failed to get local address");
-    
+
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
-    
+    let server_handle = tokio::spawn(async move { server.run().await });
+
     // Give server time to start
     sleep(Duration::from_millis(100)).await;
-    
+
     // Make HTTP PUT request (S3 upload)
     let client = reqwest::Client::new();
     let response = client
@@ -121,14 +128,14 @@ async fn test_server_handles_basic_http_requests() {
         .send()
         .await
         .expect("Failed to send request");
-    
+
     // Verify response (should be 200 or 201 for successful upload)
     assert!(
         response.status().is_success(),
         "Upload should succeed, got status: {}",
         response.status()
     );
-    
+
     // Shutdown server
     server_handle.abort();
 }
@@ -139,26 +146,25 @@ async fn test_server_handles_basic_http_requests() {
 #[tokio::test]
 async fn test_server_graceful_shutdown() {
     let config = test_config(0);
-    let server = PingoraServer::new(config).expect("Failed to create server");
-    
+    let server = PingoraServer::new(config)
+        .await
+        .expect("Failed to create server");
+
     // Start server in background
-    let server_handle = tokio::spawn(async move {
-        server.run().await
-    });
-    
+    let server_handle = tokio::spawn(async move { server.run().await });
+
     // Give server time to start
     sleep(Duration::from_millis(100)).await;
-    
+
     // Send shutdown signal
     server_handle.abort();
-    
+
     // Wait for shutdown to complete
     let result = tokio::time::timeout(Duration::from_secs(5), server_handle).await;
-    
+
     // Verify shutdown completed within timeout
     assert!(
         result.is_ok(),
         "Server should shutdown gracefully within 5 seconds"
     );
 }
-

@@ -882,7 +882,7 @@
 Each PR must satisfy:
 
 - [ ] **All tests pass**: `cargo test --all-features`
-- [ ] **No Clippy warnings**: `cargo clippy -- -D warnings`
+- [ ] **No Clippy warnings**: `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] **Code formatted**: `cargo fmt --check`
 - [ ] **Documentation updated**: `cargo doc --no-deps`
 - [ ] **PR description includes**:
