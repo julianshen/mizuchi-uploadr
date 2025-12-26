@@ -36,18 +36,21 @@ This project follows **strict Test-Driven Development (TDD)**. All new features 
 ```
 
 #### Phase 1: RED - Write Failing Test 🔴
+
 - Write a test that defines expected behavior
 - Run the test - it MUST fail
 - Ensure test fails for the RIGHT reason (not syntax errors)
 - Test should be minimal and focused
 
 #### Phase 2: GREEN - Make It Pass 🟢
+
 - Write the MINIMUM code to pass the test
 - Do not add extra features or optimizations
 - Focus only on making the test green
 - Resist the urge to write "complete" code
 
 #### Phase 3: REFACTOR - Clean Up 🔵
+
 - Improve code quality while keeping tests green
 - Remove duplication
 - Improve naming and structure
@@ -83,12 +86,12 @@ git commit -m "feat(upload): add new capability
 
 ### Test Categories
 
-| Category | Location | Command | Purpose |
-|----------|----------|---------|---------|
-| Unit Tests | `src/**/*.rs` (inline) | `cargo test --lib` | Test individual functions |
-| Integration Tests | `tests/` | `cargo test --test '*'` | Test component interactions |
-| Benchmarks | `benches/` | `cargo bench` | Performance regression |
-| E2E Tests | `test_*.py` | `python3 test_zero_copy.py` | Full system validation |
+| Category          | Location               | Command                     | Purpose                     |
+| ----------------- | ---------------------- | --------------------------- | --------------------------- |
+| Unit Tests        | `src/**/*.rs` (inline) | `cargo test --lib`          | Test individual functions   |
+| Integration Tests | `tests/`               | `cargo test --test '*'`     | Test component interactions |
+| Benchmarks        | `benches/`             | `cargo bench`               | Performance regression      |
+| E2E Tests         | `test_*.py`            | `python3 test_zero_copy.py` | Full system validation      |
 
 ### Quality Gates
 
@@ -116,28 +119,46 @@ Closes #123
 
 ### Pull Request Rule
 
-**MANDATORY**: Create a Pull Request for review after completing each development phase.
+**MANDATORY**: Create a Pull Request for review after completing the full TDD cycle (RED → GREEN → REFACTOR).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              PR-per-Phase Development Flow                   │
+│              PR-per-Task Development Flow                    │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│   🔴 RED ──► PR #1 ──► Review ──► Merge                     │
-│                                    │                         │
-│   🟢 GREEN ──► PR #2 ──► Review ──► Merge                   │
-│                                    │                         │
-│   🔵 REFACTOR ──► PR #3 ──► Review ──► Merge                │
+│   🔴 RED: Write failing tests                               │
+│      ↓                                                       │
+│   🟢 GREEN: Implement minimal code                          │
+│      ↓                                                       │
+│   🔵 REFACTOR: Clean up and optimize                        │
+│      ↓                                                       │
+│   📝 PR: Create Pull Request                                │
+│      ↓                                                       │
+│   👀 REVIEW: Code review                                    │
+│      ↓                                                       │
+│   ✅ MERGE: Merge to base branch                            │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Why PR per phase?**
-- Enables incremental code review
-- Catches issues early before they compound
-- Documents the TDD journey in git history
-- Allows team to verify RED phase actually fails
-- Keeps PRs small and reviewable
+**Why PR per task (not per phase)?**
+
+- Complete feature in one PR (easier to review as a whole)
+- Reduces PR overhead (1 PR instead of 3)
+- Faster iteration (no waiting between phases)
+- Cleaner git history (one merge per feature)
+- Still maintains TDD discipline in commit history
+- Reviewer sees the full TDD journey in one PR
+
+**Commit Structure within PR:**
+
+```
+feat(module): Task description
+
+Commit 1: 🔴 RED - Add failing tests
+Commit 2: 🟢 GREEN - Implement minimal solution
+Commit 3: 🔵 REFACTOR - Optimize and clean up
+```
 
 ## Architecture
 
@@ -191,15 +212,18 @@ mizuchi-uploadr/
 ## Critical Files
 
 ### `src/upload/zero_copy.rs`
+
 This is the core innovation of the project. It contains:
 
 1. **Linux implementation** (`#[cfg(target_os = "linux")]`)
+
    - `ZeroCopyTransfer` struct with pipe file descriptors
    - `splice()` for socket→pipe→socket transfers
    - `sendfile()` for file→socket transfers
    - Uses `nix` crate for syscall bindings
 
 2. **Fallback implementation** (`#[cfg(not(target_os = "linux"))]`)
+
    - Uses tokio's `AsyncRead`/`AsyncWrite`
    - Buffered transfer with configurable chunk size
 
@@ -208,6 +232,7 @@ This is the core innovation of the project. It contains:
    - Runtime detection of capabilities
 
 ### Platform Detection Pattern
+
 ```rust
 #[cfg(target_os = "linux")]
 mod linux { /* splice/sendfile */ }
@@ -226,16 +251,18 @@ pub struct DataTransfer {
 ## S3 API Compatibility
 
 ### Supported Operations
-| Operation | Method | Endpoint |
-|-----------|--------|----------|
-| PutObject | PUT | `/{bucket}/{key}` |
-| CreateMultipartUpload | POST | `/{bucket}/{key}?uploads` |
-| UploadPart | PUT | `/{bucket}/{key}?partNumber=N&uploadId=X` |
-| CompleteMultipartUpload | POST | `/{bucket}/{key}?uploadId=X` |
-| AbortMultipartUpload | DELETE | `/{bucket}/{key}?uploadId=X` |
-| ListParts | GET | `/{bucket}/{key}?uploadId=X` |
+
+| Operation               | Method | Endpoint                                  |
+| ----------------------- | ------ | ----------------------------------------- |
+| PutObject               | PUT    | `/{bucket}/{key}`                         |
+| CreateMultipartUpload   | POST   | `/{bucket}/{key}?uploads`                 |
+| UploadPart              | PUT    | `/{bucket}/{key}?partNumber=N&uploadId=X` |
+| CompleteMultipartUpload | POST   | `/{bucket}/{key}?uploadId=X`              |
+| AbortMultipartUpload    | DELETE | `/{bucket}/{key}?uploadId=X`              |
+| ListParts               | GET    | `/{bucket}/{key}?uploadId=X`              |
 
 ### NOT Supported (by design)
+
 - GetObject, HeadObject (no downloads)
 - ListObjects, ListBuckets (no listing)
 - DeleteObject (no deletions)
@@ -248,7 +275,7 @@ server:
   address: "0.0.0.0:8080"
   zero_copy:
     enabled: true
-    pipe_buffer_size: 1048576  # 1MB
+    pipe_buffer_size: 1048576 # 1MB
 
 buckets:
   - name: "uploads"
@@ -257,14 +284,15 @@ buckets:
       bucket: "my-bucket"
       region: "us-east-1"
     upload:
-      multipart_threshold: 52428800  # 50MB
-      part_size: 104857600           # 100MB
+      multipart_threshold: 52428800 # 50MB
+      part_size: 104857600 # 100MB
       concurrent_parts: 4
 ```
 
 ## Development Tasks (TDD Approach)
 
 ### "Add a new S3 operation"
+
 1. 🔴 **RED**: Write failing integration test for the new operation
 2. 🔴 **RED**: Write unit test for parsing in `S3RequestParser`
 3. 🟢 **GREEN**: Add variant to `S3Operation` enum in `router/s3_parser.rs`
@@ -274,6 +302,7 @@ buckets:
 7. ✅ **VERIFY**: Run full test suite
 
 ### "Support a new auth method"
+
 1. 🔴 **RED**: Write failing test for auth validation
 2. 🔴 **RED**: Write test for config loading
 3. 🟢 **GREEN**: Add to `auth/` module
@@ -284,6 +313,7 @@ buckets:
 8. ✅ **VERIFY**: Run full test suite
 
 ### "Optimize transfer performance"
+
 1. 🔴 **RED**: Write benchmark capturing current performance
 2. Check `zero_copy.rs` first
 3. 🟢 **GREEN**: Tune `pipe_buffer_size` in config
@@ -292,6 +322,7 @@ buckets:
 6. ✅ **VERIFY**: Compare benchmarks, ensure no regressions
 
 ### "Fix a bug"
+
 1. 🔴 **RED**: Write a test that reproduces the bug (test MUST fail)
 2. 🟢 **GREEN**: Fix the bug with minimal code change
 3. 🔵 **REFACTOR**: Check for similar issues elsewhere
@@ -300,6 +331,7 @@ buckets:
 ## Common Patterns
 
 **Error Handling**
+
 ```rust
 use thiserror::Error;
 
@@ -307,13 +339,14 @@ use thiserror::Error;
 pub enum UploadError {
     #[error("S3 error: {0}")]
     S3Error(#[from] aws_sdk_s3::Error),
-    
+
     #[error("Zero-copy not available")]
     ZeroCopyUnavailable,
 }
 ```
 
 **Metrics**
+
 ```rust
 use prometheus::{Counter, Histogram};
 
@@ -326,6 +359,7 @@ lazy_static! {
 ```
 
 **Async with splice**
+
 ```rust
 // splice() is blocking, so we yield to tokio runtime
 match nix::fcntl::splice(...) {
@@ -339,24 +373,24 @@ match nix::fcntl::splice(...) {
 
 ## Performance Expectations
 
-| Size | Linux (zero-copy) | macOS/Windows (buffered) |
-|------|-------------------|--------------------------|
-| 1 MB | ~2 ms | ~10 ms |
-| 10 MB | ~12 ms | ~600 ms |
-| 50 MB | ~60 ms | ~15,000 ms |
+| Size  | Linux (zero-copy) | macOS/Windows (buffered) |
+| ----- | ----------------- | ------------------------ |
+| 1 MB  | ~2 ms             | ~10 ms                   |
+| 10 MB | ~12 ms            | ~600 ms                  |
+| 50 MB | ~60 ms            | ~15,000 ms               |
 
 Zero-copy provides **50-250x speedup** for large files on Linux.
 
 ## Key Dependencies
 
-| Crate | Purpose |
-|-------|---------|
-| `tokio` | Async runtime |
-| `hyper` | HTTP server |
-| `aws-sdk-s3` | S3 client |
-| `nix` | Linux syscalls (Linux only) |
-| `jsonwebtoken` | JWT validation |
-| `prometheus` | Metrics |
+| Crate          | Purpose                     |
+| -------------- | --------------------------- |
+| `tokio`        | Async runtime               |
+| `hyper`        | HTTP server                 |
+| `aws-sdk-s3`   | S3 client                   |
+| `nix`          | Linux syscalls (Linux only) |
+| `jsonwebtoken` | JWT validation              |
+| `prometheus`   | Metrics                     |
 
 ## Gotchas
 
@@ -382,6 +416,7 @@ Zero-copy provides **50-250x speedup** for large files on Linux.
 **[Yatagarasu](https://github.com/julianshen/yatagarasu)** - Read-only S3 proxy built with Pingora framework.
 
 Mizuchi Uploadr can **reuse implementations** from Yatagarasu:
+
 - **JWT Authentication** (`src/auth/`) - HS256/RS256/ES256, JWKS endpoints
 - **OPA Authorization** (`src/authz/opa/`) - Policy-based access control
 - **OpenFGA Authorization** (`src/authz/openfga/`) - Fine-grained authorization
