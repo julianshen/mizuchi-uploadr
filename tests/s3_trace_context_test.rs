@@ -18,6 +18,8 @@ mod tests {
             endpoint: Some(endpoint),
             access_key: Some("AKIAIOSFODNN7EXAMPLE".to_string()),
             secret_key: Some("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()),
+            retry: None,
+            timeout: None,
         }
     }
 
