@@ -9,7 +9,9 @@
 //! - **W3C Trace Context**: Automatic traceparent header injection for distributed tracing
 //! - **XML Parsing**: Parses S3 XML responses for multipart uploads
 //! - **Error Handling**: Comprehensive HTTP error handling with S3 error messages
-//! - **SigV4 Signing**: AWS Signature Version 4 authentication (TODO)
+//! - **SigV4 Signing**: AWS Signature Version 4 authentication
+//! - **Connection Pool**: S3ClientPool for managing multiple bucket clients
+//! - **Credentials**: Flexible credential loading from environment or config
 //!
 //! # Example
 //!
@@ -105,7 +107,23 @@
 //! - **Simple XML parsing**: Uses basic string matching - consider using quick-xml for complex responses
 //! - **Key parameter**: All multipart operations now accept key parameter for flexible object naming
 
+// Sub-modules
+pub mod credentials;
+pub mod pool;
+
+// Re-exports for convenience
+pub use credentials::{
+    Credentials, CredentialsError, CredentialsProvider, CredentialsProviderTrait,
+    EnvironmentCredentials, StaticCredentials,
+};
+pub use pool::{S3ClientPool, S3ClientPoolError};
+
+use aws_sigv4::http_request::{
+    sign, SignableBody, SignableRequest, SigningParams, SigningSettings,
+};
+use aws_sigv4::sign::v4;
 use bytes::Bytes;
+use std::time::SystemTime;
 use thiserror::Error;
 
 /// S3 client errors
@@ -172,6 +190,19 @@ impl S3Client {
             .unwrap_or_else(|| format!("https://s3.{}.amazonaws.com", self.config.region))
     }
 
+    /// Get the host from the endpoint URL
+    fn get_host(&self) -> String {
+        let endpoint = self.endpoint();
+        // Parse the URL to extract the host
+        if let Some(stripped) = endpoint.strip_prefix("https://") {
+            stripped.split('/').next().unwrap_or(&endpoint).to_string()
+        } else if let Some(stripped) = endpoint.strip_prefix("http://") {
+            stripped.split('/').next().unwrap_or(&endpoint).to_string()
+        } else {
+            endpoint
+        }
+    }
+
     /// Helper function to extract a tag value from XML
     fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
         let start_tag = format!("<{}>", tag);
@@ -194,7 +225,7 @@ impl S3Client {
     fn inject_trace_context(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         // Generate a trace context using timestamp
         // TODO: Extract from current OpenTelemetry span context
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::UNIX_EPOCH;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -208,6 +239,97 @@ impl S3Client {
         let traceparent = format!("00-{}-{}-{:02x}", trace_id, span_id, trace_flags);
 
         request.header("traceparent", traceparent)
+    }
+
+    /// Sign a request with AWS SigV4
+    ///
+    /// Returns the signed headers (Authorization and x-amz-date) that should be
+    /// added to the HTTP request.
+    ///
+    /// # Arguments
+    ///
+    /// * `method` - HTTP method (GET, PUT, POST, DELETE)
+    /// * `uri` - Full request URI including query string
+    /// * `headers` - Request headers
+    /// * `body` - Request body bytes
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<(String, String)>)` - Signed headers to add
+    /// * `Err(S3ClientError)` - If signing fails
+    fn sign_request(
+        &self,
+        method: &str,
+        uri: &str,
+        headers: &[(String, String)],
+        body: &[u8],
+    ) -> Result<Vec<(String, String)>, S3ClientError> {
+        // Get credentials from config
+        let access_key = self.config.access_key.as_ref()
+            .ok_or_else(|| S3ClientError::SigningError("Missing access key".into()))?;
+        let secret_key = self.config.secret_key.as_ref()
+            .ok_or_else(|| S3ClientError::SigningError("Missing secret key".into()))?;
+
+        // Create credentials
+        let credentials = aws_credential_types::Credentials::new(
+            access_key,
+            secret_key,
+            None, // session token
+            None, // expiration
+            "mizuchi-uploadr",
+        );
+
+        // Convert to Identity for signing
+        let identity = aws_smithy_runtime_api::client::identity::Identity::new(
+            credentials,
+            None, // expiration
+        );
+
+        // Signing settings
+        let settings = SigningSettings::default();
+
+        // Create signing params
+        let signing_params = v4::SigningParams::builder()
+            .identity(&identity)
+            .region(&self.config.region)
+            .name("s3")
+            .time(SystemTime::now())
+            .settings(settings)
+            .build()
+            .map_err(|e| S3ClientError::SigningError(e.to_string()))?;
+
+        let signing_params = SigningParams::V4(signing_params);
+
+        // Create signable request
+        let signable_body = SignableBody::Bytes(body);
+        let signable_request = SignableRequest::new(
+            method,
+            uri,
+            headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+            signable_body,
+        )
+        .map_err(|e| S3ClientError::SigningError(e.to_string()))?;
+
+        // Sign the request
+        let (signing_instructions, _signature) = sign(signable_request, &signing_params)
+            .map_err(|e| S3ClientError::SigningError(e.to_string()))?
+            .into_parts();
+
+        // Extract the signed headers
+        let mut signed_headers = Vec::new();
+        for (name, value) in signing_instructions.headers() {
+            signed_headers.push((
+                name.to_string(),
+                value.to_string(),
+            ));
+        }
+
+        Ok(signed_headers)
+    }
+
+    /// Check if this client has credentials configured for signing
+    pub fn has_credentials(&self) -> bool {
+        self.config.access_key.is_some() && self.config.secret_key.is_some()
     }
 
     /// Upload an object to S3 (PutObject)
@@ -278,12 +400,32 @@ impl S3Client {
         // Build the request URL
         let url = format!("{}/{}", self.endpoint(), key);
 
+        // Build headers list for signing
+        let mut headers = vec![
+            ("host".to_string(), self.get_host()),
+        ];
+        if let Some(ct) = content_type {
+            headers.push(("content-type".to_string(), ct.to_string()));
+        }
+
+        // Sign the request if credentials are available
+        let signed_headers = if self.has_credentials() {
+            self.sign_request("PUT", &url, &headers, &body)?
+        } else {
+            vec![]
+        };
+
         // Build the HTTP request
         let mut request = self.http_client.put(&url).body(body);
 
         // Add Content-Type header if provided
         if let Some(ct) = content_type {
             request = request.header("Content-Type", ct);
+        }
+
+        // Add signed headers (Authorization, x-amz-date, etc.)
+        for (name, value) in signed_headers {
+            request = request.header(name, value);
         }
 
         // Inject W3C Trace Context

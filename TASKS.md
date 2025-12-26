@@ -178,34 +178,34 @@
 
 #### Task 7: Phase 1.2 - Request Router Enhancement
 
-- **Status**: 🚀 **NEXT** (Ready to start)
+- **Status**: ✅ **COMPLETE** (2025-12-26)
 - **Priority**: HIGH
 - **Estimated**: 3-4 days
+- **Actual**: 1 day
 - **Depends On**: Task 6 ✅
 - **Goal**: Complete S3 request routing with bucket resolution
 - **Impact**: Multi-bucket support
 - **Files**:
-  - `src/router/bucket_resolver.rs` (new)
-  - `src/router/mod.rs` (modify)
-  - `tests/router_test.rs` (modify)
-- **PRs**: TBD (RED), TBD (GREEN), TBD (REFACTOR)
+  - `src/router/bucket_resolver.rs` (created)
+  - `src/router/mod.rs` (modified)
+  - `tests/bucket_resolver_test.rs` (created)
+- **PRs**: #24 (RED - merged), #25 (GREEN+REFACTOR - merged)
 - **Subtasks**:
-  - [ ] 🔴 RED: Test route `/uploads/file.txt` to correct S3 bucket
-  - [ ] 🔴 RED: Test reject requests to non-configured buckets
-  - [ ] 🟢 GREEN: Create `BucketResolver` struct
-  - [ ] 🟢 GREEN: Map path prefixes to S3 configs
-  - [ ] 🔵 REFACTOR: Use trie or hashmap for fast lookup
-  - [ ] 🔵 REFACTOR: Add caching if needed
-  - [ ] ✅ Verify: Bucket resolution works correctly
-  - [ ] ✅ Verify: Invalid buckets rejected with 404
-  - [ ] ✅ Verify: All tests pass
+  - [x] 🔴 RED: Test route `/uploads/file.txt` to correct S3 bucket
+  - [x] 🔴 RED: Test reject requests to non-configured buckets
+  - [x] 🟢 GREEN: Create `BucketResolver` struct
+  - [x] 🟢 GREEN: Map path prefixes to S3 configs
+  - [x] 🔵 REFACTOR: Use HashMap for fast O(1) lookup
+  - [x] ✅ Verify: Bucket resolution works correctly
+  - [x] ✅ Verify: Invalid buckets rejected with 404
+  - [x] ✅ Verify: All tests pass
 
 #### Task 8: Phase 1.3 - S3 Client Integration
 
-- **Status**: ⏳ Not Started
+- **Status**: 🚀 **NEXT** (Ready to start)
 - **Priority**: HIGH
 - **Estimated**: 1 week
-- **Depends On**: Task 7
+- **Depends On**: Task 7 ✅
 - **Goal**: Integrate AWS SDK for actual S3 operations
 - **Impact**: Real S3 connectivity
 - **Files**:
@@ -475,11 +475,11 @@
 ### Overall Status
 
 - **Total Tasks**: 17
-- **Completed**: 1 (Task 6: HTTP Server ✅)
+- **Completed**: 2 (Task 6: HTTP Server ✅, Task 7: Bucket Resolver ✅)
 - **In Progress**: 0
-- **Not Started**: 16
+- **Not Started**: 15
 - **Total Estimated Time**: ~20 weeks
-- **Time Saved**: Task 6 completed in 1 day vs 1 week estimated (6 days ahead)
+- **Time Saved**: Task 6 (6 days) + Task 7 (3 days) = 9 days ahead of schedule!
 
 ### By Priority
 
@@ -509,9 +509,9 @@
 ### Milestone 2: Core Infrastructure (Tasks 6-8)
 
 - **Target**: 2026-01-15
-- **Status**: 🚀 In Progress (Task 6 ✅, Task 7 next)
-- **Progress**: 33% (1/3 tasks complete)
-- **Deliverable**: Pingora server ✅, routing (next), S3 client
+- **Status**: 🚀 In Progress (Task 6 ✅, Task 7 ✅, Task 8 next)
+- **Progress**: 67% (2/3 tasks complete)
+- **Deliverable**: Pingora server ✅, routing ✅, S3 client (next)
 
 ### Milestone 3: Upload Operations (Tasks 9-11)
 
