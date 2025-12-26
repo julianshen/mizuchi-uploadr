@@ -93,10 +93,7 @@ fn test_init_tracing_with_invalid_endpoint() {
 
     // Should fail with appropriate error
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("endpoint"));
+    assert!(result.unwrap_err().to_string().contains("endpoint"));
 }
 
 #[test]
@@ -151,4 +148,3 @@ fn test_tracing_guard_drop() {
 
     // If we reach here without panic, the drop worked correctly
 }
-

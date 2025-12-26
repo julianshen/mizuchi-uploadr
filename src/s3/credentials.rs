@@ -52,10 +52,7 @@ pub struct Credentials {
 
 impl Credentials {
     /// Create new credentials
-    pub fn new(
-        access_key_id: impl Into<String>,
-        secret_access_key: impl Into<String>,
-    ) -> Self {
+    pub fn new(access_key_id: impl Into<String>, secret_access_key: impl Into<String>) -> Self {
         Self {
             access_key_id: access_key_id.into(),
             secret_access_key: secret_access_key.into(),
@@ -114,15 +111,13 @@ impl CredentialsProvider {
     /// - `AWS_SECRET_ACCESS_KEY`
     /// - `AWS_SESSION_TOKEN` (optional)
     pub async fn from_env() -> Result<Credentials, CredentialsError> {
-        let access_key = std::env::var("AWS_ACCESS_KEY_ID")
-            .map_err(|_| CredentialsError::MissingCredentials(
-                "AWS_ACCESS_KEY_ID not set".into()
-            ))?;
+        let access_key = std::env::var("AWS_ACCESS_KEY_ID").map_err(|_| {
+            CredentialsError::MissingCredentials("AWS_ACCESS_KEY_ID not set".into())
+        })?;
 
-        let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY")
-            .map_err(|_| CredentialsError::MissingCredentials(
-                "AWS_SECRET_ACCESS_KEY not set".into()
-            ))?;
+        let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").map_err(|_| {
+            CredentialsError::MissingCredentials("AWS_SECRET_ACCESS_KEY not set".into())
+        })?;
 
         let session_token = std::env::var("AWS_SESSION_TOKEN").ok();
 
@@ -136,15 +131,13 @@ impl CredentialsProvider {
     ///
     /// Uses the `access_key` and `secret_key` fields from the configuration.
     pub fn from_config(config: &S3Config) -> Result<Credentials, CredentialsError> {
-        let access_key = config.access_key.as_ref()
-            .ok_or_else(|| CredentialsError::MissingCredentials(
-                "access_key not set in config".into()
-            ))?;
+        let access_key = config.access_key.as_ref().ok_or_else(|| {
+            CredentialsError::MissingCredentials("access_key not set in config".into())
+        })?;
 
-        let secret_key = config.secret_key.as_ref()
-            .ok_or_else(|| CredentialsError::MissingCredentials(
-                "secret_key not set in config".into()
-            ))?;
+        let secret_key = config.secret_key.as_ref().ok_or_else(|| {
+            CredentialsError::MissingCredentials("secret_key not set in config".into())
+        })?;
 
         Ok(Credentials::new(access_key.clone(), secret_key.clone()))
     }

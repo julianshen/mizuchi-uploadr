@@ -31,8 +31,8 @@ mod tests {
     #[tokio::test]
     async fn test_s3_client_pool_creation() {
         use mizuchi_uploadr::config::{
-            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig,
-            UploadConfig, ZeroCopyConfig,
+            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, UploadConfig,
+            ZeroCopyConfig,
         };
         use mizuchi_uploadr::s3::S3ClientPool; // This should fail - type doesn't exist yet
 
@@ -84,8 +84,8 @@ mod tests {
     #[tokio::test]
     async fn test_s3_client_pool_get_client() {
         use mizuchi_uploadr::config::{
-            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig,
-            UploadConfig, ZeroCopyConfig,
+            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, UploadConfig,
+            ZeroCopyConfig,
         };
         use mizuchi_uploadr::s3::S3ClientPool;
 
@@ -206,8 +206,8 @@ mod tests {
     #[tokio::test]
     async fn test_connection_pooling_reuses_client() {
         use mizuchi_uploadr::config::{
-            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig,
-            UploadConfig, ZeroCopyConfig,
+            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, UploadConfig,
+            ZeroCopyConfig,
         };
         use mizuchi_uploadr::s3::S3ClientPool;
 
@@ -248,7 +248,11 @@ mod tests {
         let c2 = client2.unwrap();
         assert_eq!(c1.bucket(), c2.bucket(), "Clients should have same bucket");
         assert_eq!(c1.region(), c2.region(), "Clients should have same region");
-        assert_eq!(c1.endpoint(), c2.endpoint(), "Clients should have same endpoint");
+        assert_eq!(
+            c1.endpoint(),
+            c2.endpoint(),
+            "Clients should have same endpoint"
+        );
     }
 
     // ========================================================================
@@ -260,8 +264,8 @@ mod tests {
     async fn test_sigv4_request_signing() {
         use bytes::Bytes;
         use mizuchi_uploadr::config::{
-            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig,
-            UploadConfig, ZeroCopyConfig,
+            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, UploadConfig,
+            ZeroCopyConfig,
         };
         use mizuchi_uploadr::s3::S3ClientPool;
         use wiremock::matchers::{header_exists, method, path};
@@ -274,10 +278,7 @@ mod tests {
             .and(path("/test-key"))
             .and(header_exists("Authorization")) // SigV4 requires Authorization header
             .and(header_exists("x-amz-date")) // SigV4 requires x-amz-date header
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("ETag", "\"abc123\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"abc123\""))
             .expect(1)
             .mount(&mock_server)
             .await;
@@ -309,7 +310,9 @@ mod tests {
 
         // Make a request - should include SigV4 headers
         let body = Bytes::from("test data");
-        let result = client.put_object("test-key", body, Some("text/plain")).await;
+        let result = client
+            .put_object("test-key", body, Some("text/plain"))
+            .await;
 
         // Request should succeed (mock server validates headers)
         assert!(result.is_ok(), "Request failed: {:?}", result.err());
@@ -322,8 +325,8 @@ mod tests {
     async fn test_sigv4_with_large_body() {
         use bytes::Bytes;
         use mizuchi_uploadr::config::{
-            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig,
-            UploadConfig, ZeroCopyConfig,
+            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, UploadConfig,
+            ZeroCopyConfig,
         };
         use mizuchi_uploadr::s3::S3ClientPool;
         use wiremock::matchers::{header_exists, method, path};
@@ -336,10 +339,7 @@ mod tests {
             .and(path("/large-test-key"))
             .and(header_exists("Authorization"))
             .and(header_exists("x-amz-date"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("ETag", "\"large-etag\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"large-etag\""))
             .expect(1)
             .mount(&mock_server)
             .await;
@@ -371,9 +371,15 @@ mod tests {
 
         // Create a 10KB body
         let body = Bytes::from(vec![b'x'; 10 * 1024]);
-        let result = client.put_object("large-test-key", body, Some("application/octet-stream")).await;
+        let result = client
+            .put_object("large-test-key", body, Some("application/octet-stream"))
+            .await;
 
-        assert!(result.is_ok(), "Large body signed request failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Large body signed request failed: {:?}",
+            result.err()
+        );
     }
 
     // ========================================================================
@@ -409,8 +415,8 @@ mod tests {
     #[tokio::test]
     async fn test_pool_client_regional_endpoint() {
         use mizuchi_uploadr::config::{
-            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig,
-            UploadConfig, ZeroCopyConfig,
+            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, UploadConfig,
+            ZeroCopyConfig,
         };
         use mizuchi_uploadr::s3::S3ClientPool;
 
@@ -425,7 +431,7 @@ mod tests {
                 s3: S3Config {
                     bucket: "my-bucket".to_string(),
                     region: "eu-west-1".to_string(), // European region
-                    endpoint: None, // Use default AWS endpoint
+                    endpoint: None,                  // Use default AWS endpoint
                     access_key: Some("AKIAIOSFODNN7EXAMPLE".to_string()),
                     secret_key: Some("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()),
                 },
@@ -447,8 +453,8 @@ mod tests {
     #[tokio::test]
     async fn test_pool_client_custom_endpoint() {
         use mizuchi_uploadr::config::{
-            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig,
-            UploadConfig, ZeroCopyConfig,
+            AuthConfig, BucketConfig, Config, MetricsConfig, S3Config, ServerConfig, UploadConfig,
+            ZeroCopyConfig,
         };
         use mizuchi_uploadr::s3::S3ClientPool;
 

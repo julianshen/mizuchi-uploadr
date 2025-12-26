@@ -216,8 +216,12 @@ impl S3Client {
         let retry_config = config.retry.clone().unwrap_or_default();
 
         let http_client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_millis(timeout_config.connect_timeout_ms))
-            .timeout(std::time::Duration::from_millis(timeout_config.request_timeout_ms))
+            .connect_timeout(std::time::Duration::from_millis(
+                timeout_config.connect_timeout_ms,
+            ))
+            .timeout(std::time::Duration::from_millis(
+                timeout_config.request_timeout_ms,
+            ))
             .build()
             .map_err(|e| S3ClientError::ConfigError(e.to_string()))?;
 
@@ -240,7 +244,7 @@ impl S3Client {
     fn calculate_backoff(&self, attempt: u32) -> std::time::Duration {
         let delay_ms = (self.retry_config.initial_backoff_ms as f64
             * self.retry_config.backoff_multiplier.powi(attempt as i32))
-            .min(self.retry_config.max_backoff_ms as f64) as u64;
+        .min(self.retry_config.max_backoff_ms as f64) as u64;
 
         std::time::Duration::from_millis(delay_ms)
     }
@@ -346,9 +350,15 @@ impl S3Client {
         body: &[u8],
     ) -> Result<Vec<(String, String)>, S3ClientError> {
         // Get credentials from config
-        let access_key = self.config.access_key.as_ref()
+        let access_key = self
+            .config
+            .access_key
+            .as_ref()
             .ok_or_else(|| S3ClientError::SigningError("Missing access key".into()))?;
-        let secret_key = self.config.secret_key.as_ref()
+        let secret_key = self
+            .config
+            .secret_key
+            .as_ref()
             .ok_or_else(|| S3ClientError::SigningError("Missing secret key".into()))?;
 
         // Create credentials
@@ -399,10 +409,7 @@ impl S3Client {
         // Extract the signed headers
         let mut signed_headers = Vec::new();
         for (name, value) in signing_instructions.headers() {
-            signed_headers.push((
-                name.to_string(),
-                value.to_string(),
-            ));
+            signed_headers.push((name.to_string(), value.to_string()));
         }
 
         Ok(signed_headers)
@@ -616,9 +623,8 @@ impl S3Client {
         }
 
         // If we get here, all retries failed
-        Err(last_error.unwrap_or_else(|| {
-            S3ClientError::RequestError("All retries exhausted".to_string())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| S3ClientError::RequestError("All retries exhausted".to_string())))
     }
 
     /// Create a multipart upload
@@ -861,6 +867,65 @@ impl S3Client {
 
         Ok(S3CompleteMultipartUploadResponse { etag })
     }
+
+    /// Abort a multipart upload
+    #[tracing::instrument(
+        name = "s3.abort_multipart_upload",
+        skip(self),
+        fields(
+            s3.bucket = %self.config.bucket,
+            s3.key = %key,
+            s3.upload_id = %upload_id,
+            http.method = "DELETE",
+            http.status_code = tracing::field::Empty
+        ),
+        err
+    )]
+    pub async fn abort_multipart_upload(
+        &self,
+        key: &str,
+        upload_id: &str,
+    ) -> Result<(), S3ClientError> {
+        // Build the request URL with uploadId query parameter
+        let url = format!("{}/{}?uploadId={}", self.endpoint(), key, upload_id);
+
+        // Build DELETE request with trace context
+        let request = self.http_client.delete(&url);
+        let request = self.inject_trace_context(request);
+
+        // Send DELETE request
+        let response = request
+            .send()
+            .await
+            .map_err(|e| S3ClientError::RequestError(e.to_string()))?;
+
+        let status = response.status();
+
+        // Check for errors (204 No Content is success for abort)
+        if !status.is_success() {
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(S3ClientError::ResponseError(format!(
+                "HTTP {}: {}",
+                status.as_u16(),
+                error_body
+            )));
+        }
+
+        // Record response attributes in span
+        let span = tracing::Span::current();
+        span.record("http.status_code", status.as_u16());
+
+        tracing::info!(
+            upload_id = %upload_id,
+            status = status.as_u16(),
+            "AbortMultipartUpload completed"
+        );
+
+        Ok(())
+    }
 }
 
 /// S3 PutObject response
@@ -990,9 +1055,13 @@ mod tests {
         use reqwest::StatusCode;
 
         // 5xx errors are retryable
-        assert!(S3Client::is_retryable_error(StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(S3Client::is_retryable_error(
+            StatusCode::INTERNAL_SERVER_ERROR
+        ));
         assert!(S3Client::is_retryable_error(StatusCode::BAD_GATEWAY));
-        assert!(S3Client::is_retryable_error(StatusCode::SERVICE_UNAVAILABLE));
+        assert!(S3Client::is_retryable_error(
+            StatusCode::SERVICE_UNAVAILABLE
+        ));
 
         // 429 Too Many Requests is retryable
         assert!(S3Client::is_retryable_error(StatusCode::TOO_MANY_REQUESTS));
@@ -1010,11 +1079,17 @@ mod tests {
     fn test_content_hash_computation() {
         // Empty body
         let hash = S3Client::compute_content_hash(b"");
-        assert_eq!(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
 
         // "hello" - known SHA256 hash
         let hash = S3Client::compute_content_hash(b"hello");
-        assert_eq!(hash, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+        assert_eq!(
+            hash,
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
     }
 
     #[test]
@@ -1037,16 +1112,28 @@ mod tests {
         let client = S3Client::new(config).unwrap();
 
         // Attempt 0: 100ms * 2^0 = 100ms
-        assert_eq!(client.calculate_backoff(0), std::time::Duration::from_millis(100));
+        assert_eq!(
+            client.calculate_backoff(0),
+            std::time::Duration::from_millis(100)
+        );
 
         // Attempt 1: 100ms * 2^1 = 200ms
-        assert_eq!(client.calculate_backoff(1), std::time::Duration::from_millis(200));
+        assert_eq!(
+            client.calculate_backoff(1),
+            std::time::Duration::from_millis(200)
+        );
 
         // Attempt 2: 100ms * 2^2 = 400ms
-        assert_eq!(client.calculate_backoff(2), std::time::Duration::from_millis(400));
+        assert_eq!(
+            client.calculate_backoff(2),
+            std::time::Duration::from_millis(400)
+        );
 
         // High attempt should cap at max_backoff_ms
-        assert_eq!(client.calculate_backoff(10), std::time::Duration::from_millis(10_000));
+        assert_eq!(
+            client.calculate_backoff(10),
+            std::time::Duration::from_millis(10_000)
+        );
     }
 
     // Note: HTTP integration tests are in tests/s3_http_api_test.rs

@@ -2,6 +2,7 @@
 //!
 //! Handles S3 upload operations with zero-copy optimization on Linux.
 
+use crate::s3::S3ClientError;
 use thiserror::Error;
 
 pub mod multipart;
@@ -28,6 +29,15 @@ pub enum UploadError {
 
     #[error("Multipart upload error: {0}")]
     MultipartError(String),
+
+    #[error("Bucket mismatch: expected {expected}, got {actual}")]
+    BucketMismatch { expected: String, actual: String },
+}
+
+impl From<S3ClientError> for UploadError {
+    fn from(err: S3ClientError) -> Self {
+        UploadError::S3Error(err.to_string())
+    }
 }
 
 /// Upload result

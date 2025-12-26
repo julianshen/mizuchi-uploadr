@@ -1,8 +1,47 @@
 //! Multipart upload handler
 //!
 //! Handles large file uploads using S3 multipart upload API.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use mizuchi_uploadr::s3::{S3Client, S3ClientConfig};
+//! use mizuchi_uploadr::upload::multipart::MultipartHandler;
+//! use bytes::Bytes;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create S3 client
+//! let config = S3ClientConfig {
+//!     bucket: "my-bucket".to_string(),
+//!     region: "us-east-1".to_string(),
+//!     endpoint: None,
+//!     access_key: Some("access-key".to_string()),
+//!     secret_key: Some("secret-key".to_string()),
+//!     retry: None,
+//!     timeout: None,
+//! };
+//! let s3_client = S3Client::new(config)?;
+//!
+//! // Create handler with S3 client
+//! let handler = MultipartHandler::with_client(s3_client);
+//!
+//! // Create multipart upload
+//! let mut upload = handler.create("my-bucket", "large-file.bin").await?;
+//!
+//! // Upload parts
+//! let part1 = Bytes::from(vec![0u8; 5 * 1024 * 1024]);
+//! handler.upload_part(&mut upload, 1, part1).await?;
+//!
+//! // Complete upload
+//! let result = handler.complete(&upload).await?;
+//! println!("Uploaded with ETag: {}", result.etag);
+//! # Ok(())
+//! # }
+//! ```
 
 use super::{UploadError, UploadResult};
+use crate::metrics::{record_multipart_upload_failure, record_multipart_upload_success};
+use crate::s3::{S3Client, S3CompletedPart};
 use bytes::Bytes;
 
 /// Minimum part size (5MB) - S3 requirement
@@ -29,24 +68,51 @@ pub struct CompletedPart {
 
 /// Multipart upload handler
 pub struct MultipartHandler {
+    /// S3 client for making upload requests
+    client: Option<S3Client>,
+    /// Bucket name (used when client is not provided)
     #[allow(dead_code)]
     bucket: String,
+    /// Region (used when client is not provided)
     #[allow(dead_code)]
     region: String,
+    /// Part size for splitting uploads
     #[allow(dead_code)]
     part_size: usize,
+    /// Number of concurrent part uploads
     #[allow(dead_code)]
     concurrent_parts: usize,
 }
 
 impl MultipartHandler {
-    /// Create a new multipart handler
+    /// Create a new multipart handler (legacy constructor)
+    ///
+    /// This constructor creates a handler without an S3 client.
+    /// Use `with_client` for production use.
     pub fn new(bucket: &str, region: &str, part_size: usize, concurrent_parts: usize) -> Self {
         Self {
+            client: None,
             bucket: bucket.to_string(),
             region: region.to_string(),
             part_size: std::cmp::max(part_size, MIN_PART_SIZE),
             concurrent_parts,
+        }
+    }
+
+    /// Create a new multipart handler with an S3 client
+    ///
+    /// This is the preferred constructor for production use.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - Configured S3 client for making upload requests
+    pub fn with_client(client: S3Client) -> Self {
+        Self {
+            bucket: client.bucket().to_string(),
+            region: client.region().to_string(),
+            client: Some(client),
+            part_size: MIN_PART_SIZE,
+            concurrent_parts: 4,
         }
     }
 
@@ -62,9 +128,36 @@ impl MultipartHandler {
         err
     )]
     pub async fn create(&self, bucket: &str, key: &str) -> Result<MultipartUpload, UploadError> {
-        // TODO: Implement actual S3 CreateMultipartUpload
-        // This is a placeholder for TDD
+        // Use S3Client if available
+        if let Some(client) = &self.client {
+            // Validate bucket matches client configuration
+            if bucket != client.bucket() {
+                return Err(UploadError::BucketMismatch {
+                    expected: client.bucket().to_string(),
+                    actual: bucket.to_string(),
+                });
+            }
 
+            // Call S3 CreateMultipartUpload API
+            let response = client.create_multipart_upload(key).await?;
+
+            // Record upload_id in span
+            tracing::Span::current().record("upload_id", response.upload_id.as_str());
+
+            tracing::info!(
+                upload_id = %response.upload_id,
+                "Created multipart upload"
+            );
+
+            return Ok(MultipartUpload {
+                upload_id: response.upload_id,
+                bucket: bucket.to_string(),
+                key: key.to_string(),
+                parts: Vec::new(),
+            });
+        }
+
+        // Legacy mode: generate UUID (for backward compatibility)
         let upload_id = uuid::Uuid::new_v4().to_string();
 
         // Record upload_id in span
@@ -72,7 +165,7 @@ impl MultipartHandler {
 
         tracing::info!(
             upload_id = %upload_id,
-            "Created multipart upload"
+            "Created multipart upload (legacy mode)"
         );
 
         Ok(MultipartUpload {
@@ -110,7 +203,32 @@ impl MultipartHandler {
             );
         }
 
-        // TODO: Implement actual S3 UploadPart
+        // Use S3Client if available
+        if let Some(client) = &self.client {
+            let response = client
+                .upload_part(&upload.key, &upload.upload_id, part_number, body.clone())
+                .await?;
+
+            let part = CompletedPart {
+                part_number,
+                etag: response.etag.clone(),
+            };
+
+            upload.parts.push(part.clone());
+
+            // Record etag in span
+            tracing::Span::current().record("s3.etag", part.etag.as_str());
+
+            tracing::info!(
+                etag = %part.etag,
+                size = body.len(),
+                "Uploaded part"
+            );
+
+            return Ok(part);
+        }
+
+        // Legacy mode: generate fake ETag
         let etag = format!("\"part-{}\"", uuid::Uuid::new_v4());
 
         let part = CompletedPart {
@@ -126,7 +244,7 @@ impl MultipartHandler {
         tracing::info!(
             etag = %part.etag,
             size = body.len(),
-            "Uploaded part"
+            "Uploaded part (legacy mode)"
         );
 
         Ok(part)
@@ -148,12 +266,48 @@ impl MultipartHandler {
             return Err(UploadError::MultipartError("No parts uploaded".into()));
         }
 
-        // TODO: Implement actual S3 CompleteMultipartUpload
+        // Use S3Client if available
+        if let Some(client) = &self.client {
+            // Convert our CompletedPart to S3CompletedPart
+            let s3_parts: Vec<S3CompletedPart> = upload
+                .parts
+                .iter()
+                .map(|p| S3CompletedPart {
+                    part_number: p.part_number,
+                    etag: p.etag.clone(),
+                })
+                .collect();
 
+            let response = client
+                .complete_multipart_upload(&upload.key, &upload.upload_id, s3_parts)
+                .await?;
+
+            let result = UploadResult {
+                etag: response.etag,
+                version_id: None,
+                bytes_written: 0, // S3 doesn't return this in CompleteMultipartUpload
+            };
+
+            // Record etag in span
+            tracing::Span::current().record("s3.etag", result.etag.as_str());
+
+            tracing::info!(
+                etag = %result.etag,
+                parts = upload.parts.len(),
+                "Completed multipart upload"
+            );
+
+            // Record success metrics
+            record_multipart_upload_success(&upload.bucket, upload.parts.len());
+
+            return Ok(result);
+        }
+
+        // Legacy mode: generate fake final ETag
         let result = UploadResult {
             etag: format!("\"{}-{}\"", uuid::Uuid::new_v4(), upload.parts.len()),
             version_id: None,
-            bytes_written: 0, // Would sum part sizes in real impl
+            bytes_written: 0,
         };
 
         // Record etag in span
@@ -162,20 +316,51 @@ impl MultipartHandler {
         tracing::info!(
             etag = %result.etag,
             parts = upload.parts.len(),
-            "Completed multipart upload"
+            "Completed multipart upload (legacy mode)"
         );
+
+        // Record success metrics (legacy mode)
+        record_multipart_upload_success(&upload.bucket, upload.parts.len());
 
         Ok(result)
     }
 
     /// Abort a multipart upload
+    #[tracing::instrument(
+        name = "upload.multipart.abort",
+        skip(self, upload),
+        fields(
+            upload_id = %upload.upload_id,
+            s3.key = %upload.key
+        ),
+        err
+    )]
     pub async fn abort(&self, upload: &MultipartUpload) -> Result<(), UploadError> {
-        // TODO: Implement actual S3 AbortMultipartUpload
+        // Use S3Client if available
+        if let Some(client) = &self.client {
+            client
+                .abort_multipart_upload(&upload.key, &upload.upload_id)
+                .await?;
 
+            tracing::info!(
+                upload_id = %upload.upload_id,
+                "Aborted multipart upload"
+            );
+
+            // Record abort as failure metrics
+            record_multipart_upload_failure(&upload.bucket);
+
+            return Ok(());
+        }
+
+        // Legacy mode: just log
         tracing::info!(
             upload_id = %upload.upload_id,
-            "Aborted multipart upload"
+            "Aborted multipart upload (legacy mode)"
         );
+
+        // Record abort as failure metrics (legacy mode)
+        record_multipart_upload_failure(&upload.bucket);
 
         Ok(())
     }

@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ratio: 0.5,
         },
         batch: BatchConfig {
-            max_queue_size: 4096, // Larger queue for production-like setup
+            max_queue_size: 4096,         // Larger queue for production-like setup
             scheduled_delay_millis: 5000, // Export every 5 seconds
             max_export_batch_size: 1024,
         },
@@ -79,7 +79,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Initializing tracing...");
     println!("   Endpoint: {}", tracing_config.otlp.endpoint);
     println!("   Service: {}", tracing_config.service_name);
-    println!("   Sampling: {} ({})", tracing_config.sampling.strategy, tracing_config.sampling.ratio);
+    println!(
+        "   Sampling: {} ({})",
+        tracing_config.sampling.strategy, tracing_config.sampling.ratio
+    );
     println!("   Compression: {:?}", tracing_config.otlp.compression);
 
     // Initialize tracing
@@ -198,4 +201,3 @@ fn main() {
     eprintln!("Run with: cargo run --example tracing_tempo --features tracing");
     std::process::exit(1);
 }
-
