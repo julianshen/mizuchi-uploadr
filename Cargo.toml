@@ -38,14 +38,14 @@ jsonwebtoken = "9.2"
 reqwest = {version = "0.12", features = ["json", "rustls-tls"], default-features = false}
 
 # Configuration
-config = "0.14"
+config = "0.15"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 serde_yaml = "0.9"
 
 # Error handling
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Logging & Tracing
 opentelemetry = {version = "0.21", optional = true}
@@ -81,7 +81,7 @@ quick-xml = { version = "0.38.4", features = ["serialize"] }
 
 # Linux-specific (zero-copy)
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = {version = "0.27", features = ["fs", "uio", "zerocopy"]}
+nix = {version = "0.30", features = ["fs", "uio", "zerocopy"]}
 
 [dev-dependencies]
 # Testing
@@ -94,8 +94,8 @@ tokio-test = "0.4"
 wiremock = "0.6"
 
 # Test utilities
-fake = "2.9"
-rand = "0.8"
+fake = "4.4"
+rand = "0.9"
 serial_test = "3.0"
 
 [[bench]]

@@ -1,0 +1,42 @@
+# Test Dockerfile for running tests on Linux
+FROM rust:1.92-bookworm
+
+WORKDIR /app
+
+# Install additional test dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        pkg-config \
+        libssl-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy manifests first for better caching
+COPY Cargo.toml Cargo.lock* ./
+
+# Create dummy source to cache dependencies
+RUN mkdir -p src tests benches examples && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "pub fn lib() {}" > src/lib.rs && \
+    echo "" > tests/dummy.rs && \
+    echo "fn main() {}" > benches/upload_benchmark.rs && \
+    echo "fn main() {}" > benches/zero_copy_benchmark.rs
+
+# Build dependencies (this layer gets cached)
+RUN cargo build --all-features 2>/dev/null || true && \
+    cargo test --no-run --all-features 2>/dev/null || true
+
+# Remove dummy source
+RUN rm -rf src tests benches examples
+
+# Copy actual source
+COPY src ./src
+COPY tests ./tests
+COPY benches ./benches
+COPY examples ./examples
+COPY config.example.yaml ./
+
+# Touch files to ensure rebuild
+RUN find src tests benches -name "*.rs" -exec touch {} \;
+
+# Default command runs all tests
+CMD ["cargo", "test", "--all-features", "--", "--nocapture"]

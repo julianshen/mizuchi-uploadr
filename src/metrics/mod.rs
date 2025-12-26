@@ -31,12 +31,20 @@ lazy_static! {
     // Zero-copy metrics
     pub static ref ZERO_COPY_BYTES: Counter = register_counter!(
         "mizuchi_zero_copy_bytes_total",
-        "Bytes transferred via zero-copy"
+        "Bytes transferred via zero-copy (splice/sendfile)"
     ).unwrap();
 
-    pub static ref ZERO_COPY_TRANSFERS: Counter = register_counter!(
+    pub static ref ZERO_COPY_TRANSFERS: CounterVec = register_counter_vec!(
         "mizuchi_zero_copy_transfers_total",
-        "Number of zero-copy transfers"
+        "Number of transfers by mode",
+        &["mode"]  // "zero_copy" or "buffered"
+    ).unwrap();
+
+    pub static ref ZERO_COPY_DURATION: HistogramVec = register_histogram_vec!(
+        "mizuchi_zero_copy_duration_seconds",
+        "Zero-copy transfer duration in seconds",
+        &["mode"],
+        vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
     ).unwrap();
 
     // Multipart metrics
@@ -85,10 +93,26 @@ pub fn record_upload_duration(bucket: &str, method: &str, duration_secs: f64) {
         .observe(duration_secs);
 }
 
-/// Record zero-copy transfer
+/// Record a data transfer with mode tracking
+///
+/// # Arguments
+/// * `bytes` - Number of bytes transferred
+/// * `duration_secs` - Transfer duration in seconds
+/// * `zero_copy` - Whether zero-copy (splice/sendfile) was used
+pub fn record_data_transfer(bytes: u64, duration_secs: f64, zero_copy: bool) {
+    let mode = if zero_copy { "zero_copy" } else { "buffered" };
+    ZERO_COPY_TRANSFERS.with_label_values(&[mode]).inc();
+    ZERO_COPY_DURATION.with_label_values(&[mode]).observe(duration_secs);
+
+    if zero_copy {
+        ZERO_COPY_BYTES.inc_by(bytes as f64);
+    }
+}
+
+/// Record zero-copy transfer (legacy compatibility)
 pub fn record_zero_copy_transfer(bytes: u64) {
     ZERO_COPY_BYTES.inc_by(bytes as f64);
-    ZERO_COPY_TRANSFERS.inc();
+    ZERO_COPY_TRANSFERS.with_label_values(&["zero_copy"]).inc();
 }
 
 /// Record authentication attempt
@@ -130,6 +154,18 @@ mod tests {
     #[test]
     fn test_record_zero_copy() {
         record_zero_copy_transfer(65536);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_record_data_transfer_zero_copy() {
+        record_data_transfer(1024 * 1024, 0.005, true);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_record_data_transfer_buffered() {
+        record_data_transfer(1024 * 1024, 0.05, false);
         // Just verify it doesn't panic
     }
 
