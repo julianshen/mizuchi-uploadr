@@ -208,28 +208,69 @@ mod tests {
 /// Bucket Resolver
 ///
 /// Maps incoming request paths to configured S3 buckets.
-/// RED Phase: Stub implementation - tests will fail.
-pub struct BucketResolver;
+/// GREEN Phase: Minimal implementation using linear search.
+pub struct BucketResolver {
+    buckets: Vec<BucketConfig>,
+}
 
 impl BucketResolver {
     /// Create a new bucket resolver from configuration
-    pub fn new(_config: &Config) -> Self {
-        // RED Phase: Stub implementation
-        Self
+    pub fn new(config: &Config) -> Self {
+        Self {
+            buckets: config.buckets.clone(),
+        }
     }
 
     /// Resolve a path to a bucket configuration
-    pub fn resolve_bucket(&self, _path: &str) -> Result<&BucketConfig, RouterError> {
-        // RED Phase: Always fail - implementation in GREEN phase
-        Err(RouterError::BucketNotFound("Not implemented".into()))
+    pub fn resolve_bucket(&self, path: &str) -> Result<&BucketConfig, RouterError> {
+        // Handle empty or root path
+        if path.is_empty() || path == "/" {
+            return Err(RouterError::InvalidPath("Empty or root path".into()));
+        }
+
+        // Normalize path (ensure it starts with /)
+        let normalized_path = if path.starts_with('/') {
+            path
+        } else {
+            return Err(RouterError::InvalidPath("Path must start with /".into()));
+        };
+
+        // Find matching bucket by path prefix
+        for bucket in &self.buckets {
+            if normalized_path.starts_with(&bucket.path_prefix) {
+                // Ensure it's a proper prefix match (not just substring)
+                let after_prefix = &normalized_path[bucket.path_prefix.len()..];
+                if after_prefix.is_empty() || after_prefix.starts_with('/') {
+                    return Ok(bucket);
+                }
+            }
+        }
+
+        // Extract the first path segment for error message
+        let first_segment = normalized_path
+            .trim_start_matches('/')
+            .split('/')
+            .next()
+            .unwrap_or("unknown");
+
+        Err(RouterError::BucketNotFound(format!(
+            "No bucket configured for path prefix: /{}",
+            first_segment
+        )))
     }
 
     /// Resolve a path to a bucket configuration and extract the S3 key
     pub fn resolve_bucket_and_key(
         &self,
-        _path: &str,
+        path: &str,
     ) -> Result<(&BucketConfig, String), RouterError> {
-        // RED Phase: Always fail - implementation in GREEN phase
-        Err(RouterError::BucketNotFound("Not implemented".into()))
+        let bucket = self.resolve_bucket(path)?;
+
+        // Extract the S3 key (path after bucket prefix)
+        let key = path[bucket.path_prefix.len()..]
+            .trim_start_matches('/')
+            .to_string();
+
+        Ok((bucket, key))
     }
 }
