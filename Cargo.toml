@@ -95,7 +95,7 @@ wiremock = "0.6"
 
 # Test utilities
 fake = "2.9"
-rand = "0.8"
+rand = "0.9"
 serial_test = "3.0"
 
 [[bench]]
