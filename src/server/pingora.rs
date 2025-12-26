@@ -1,14 +1,41 @@
-//! Pingora-based HTTP Server
+//! HTTP Server for Mizuchi Uploadr
 //!
-//! GREEN Phase: Minimal implementation to make tests pass.
-//! This uses hyper for now - will be refactored to use Pingora framework in REFACTOR phase.
+//! This module provides a high-performance HTTP server for handling upload requests.
 //!
-//! # Features
+//! # Architecture
 //!
-//! - HTTP server binding
-//! - Health check endpoint
-//! - Basic request handling
+//! The server is built on top of `hyper` and `tokio`, providing:
+//! - Async I/O for high concurrency
+//! - HTTP/1.1 support
 //! - Graceful shutdown
+//! - Health check endpoint
+//!
+//! # Design Decision: Hyper vs Pingora
+//!
+//! While the module is named `pingora` (inspired by Cloudflare's Pingora framework),
+//! the current implementation uses `hyper` directly. This decision was made because:
+//!
+//! 1. **Simplicity**: Hyper provides everything we need for an upload-only proxy
+//! 2. **Maturity**: Hyper is battle-tested and well-documented
+//! 3. **Flexibility**: Direct hyper usage gives us full control over the HTTP layer
+//! 4. **Performance**: Hyper is already extremely fast for our use case
+//!
+//! Pingora is designed for complex proxy scenarios (load balancing, caching, etc.)
+//! which are beyond the scope of Mizuchi Uploadr's upload-only design.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use mizuchi_uploadr::config::Config;
+//! use mizuchi_uploadr::server::pingora::PingoraServer;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let config = Config::default();
+//! let server = PingoraServer::new(config).await?;
+//! server.run().await?;
+//! # Ok(())
+//! # }
+//! ```
 //!
 
 use crate::config::Config;
@@ -22,10 +49,15 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
-/// Pingora HTTP Server
+/// HTTP Server for Mizuchi Uploadr
 ///
-/// GREEN Phase: Minimal implementation using hyper
-/// TODO: Refactor to use actual Pingora framework
+/// This server handles incoming HTTP requests and routes them to appropriate handlers.
+///
+/// # Fields
+///
+/// * `config` - Server configuration (shared across connections)
+/// * `listener` - TCP listener for accepting connections
+/// * `local_addr` - The actual address the server is bound to
 pub struct PingoraServer {
     config: Arc<Config>,
     listener: TcpListener,
@@ -33,9 +65,32 @@ pub struct PingoraServer {
 }
 
 impl PingoraServer {
-    /// Create a new Pingora server instance
+    /// Create a new HTTP server instance
     ///
-    /// Binds to the configured address immediately
+    /// This method binds to the configured address immediately. If port 0 is specified,
+    /// the OS will assign an available port.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Server configuration containing the bind address
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(PingoraServer)` - Successfully created and bound server
+    /// * `Err(ServerError::BindError)` - Failed to parse address or bind to port
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use mizuchi_uploadr::config::Config;
+    /// # use mizuchi_uploadr::server::pingora::PingoraServer;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = Config::default();
+    /// let server = PingoraServer::new(config).await?;
+    /// println!("Server bound to: {:?}", server.local_addr()?);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn new(config: Config) -> Result<Self, ServerError> {
         // Parse address
         let addr: SocketAddr = config
@@ -64,13 +119,47 @@ impl PingoraServer {
     }
 
     /// Get the local address the server is bound to
+    ///
+    /// This is useful when binding to port 0 (OS-assigned port) to discover
+    /// which port was actually assigned.
+    ///
+    /// # Returns
+    ///
+    /// The socket address (IP + port) the server is listening on
     pub fn local_addr(&self) -> Result<SocketAddr, ServerError> {
         Ok(self.local_addr)
     }
 
     /// Run the server
     ///
-    /// Accepts connections and handles requests until shutdown
+    /// Accepts incoming connections and spawns a task to handle each one.
+    /// This method runs indefinitely until the server is shut down (e.g., via SIGTERM).
+    ///
+    /// # Behavior
+    ///
+    /// - Each connection is handled in a separate tokio task
+    /// - Connection errors are logged but don't stop the server
+    /// - The server continues accepting new connections even if some fail
+    ///
+    /// # Returns
+    ///
+    /// This method only returns if there's a fatal error accepting connections.
+    /// In normal operation, it runs forever.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use mizuchi_uploadr::config::Config;
+    /// # use mizuchi_uploadr::server::pingora::PingoraServer;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = Config::default();
+    /// let server = PingoraServer::new(config).await?;
+    ///
+    /// // This will run forever
+    /// server.run().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn run(self) -> Result<(), ServerError> {
         info!("Starting Pingora server on {}", self.local_addr);
 
@@ -106,6 +195,23 @@ impl PingoraServer {
 }
 
 /// Handle HTTP request
+///
+/// Routes incoming requests to appropriate handlers based on path and method.
+///
+/// # Supported Endpoints
+///
+/// * `GET /health` - Health check endpoint (returns "ok")
+/// * `PUT /uploads/*` - Upload endpoint (placeholder for actual upload logic)
+/// * All other requests return 404 Not Found
+///
+/// # Arguments
+///
+/// * `req` - The incoming HTTP request
+/// * `_config` - Server configuration (currently unused, reserved for future use)
+///
+/// # Returns
+///
+/// An HTTP response with appropriate status code and body
 async fn handle_request(
     req: Request<Incoming>,
     _config: Arc<Config>,
@@ -119,23 +225,27 @@ async fn handle_request(
     if path == "/health" && method == hyper::Method::GET {
         return Ok(Response::builder()
             .status(StatusCode::OK)
+            .header("Content-Type", "text/plain")
             .body("ok".to_string())
-            .unwrap());
+            .expect("Failed to build health check response"));
     }
 
     // Handle upload requests (PUT to /uploads/*)
     if path.starts_with("/uploads/") && method == hyper::Method::PUT {
         // TODO: Implement actual upload logic
-        // For now, just return success to make tests pass
+        // This will be connected to the upload handlers in future iterations
+        info!("Upload request to {}", path);
         return Ok(Response::builder()
             .status(StatusCode::OK)
+            .header("Content-Type", "text/plain")
             .body("Upload successful".to_string())
-            .unwrap());
+            .expect("Failed to build upload response"));
     }
 
     // Default: 404 Not Found
     Ok(Response::builder()
         .status(StatusCode::NOT_FOUND)
+        .header("Content-Type", "text/plain")
         .body("Not Found".to_string())
-        .unwrap())
+        .expect("Failed to build 404 response"))
 }

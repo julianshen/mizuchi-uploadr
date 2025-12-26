@@ -27,6 +27,7 @@ impl PutObjectHandler {
 
 #[async_trait]
 impl UploadHandler for PutObjectHandler {
+    #[allow(unused_variables)] // content_type used in tracing instrumentation
     #[tracing::instrument(
         name = "upload.put_object",
         skip(self, body),
@@ -61,7 +62,7 @@ impl UploadHandler for PutObjectHandler {
 
         // Record result in span
         let span = tracing::Span::current();
-        span.record("s3.etag", &result.etag.as_str());
+        span.record("s3.etag", result.etag.as_str());
         span.record("upload.bytes_written", bytes_written);
 
         tracing::info!(

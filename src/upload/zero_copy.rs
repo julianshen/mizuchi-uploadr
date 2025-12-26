@@ -134,7 +134,7 @@ mod linux {
 #[cfg(not(target_os = "linux"))]
 mod fallback {
     use super::*;
-    use tokio::io::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
     /// Buffered transfer (fallback for non-Linux platforms)
     pub struct ZeroCopyTransfer {
@@ -148,7 +148,12 @@ mod fallback {
         }
 
         /// Transfer data using buffered I/O
-        pub async fn transfer<S, D>(&self, source: &mut S, dest: &mut D, len: usize) -> io::Result<usize>
+        pub async fn transfer<S, D>(
+            &self,
+            source: &mut S,
+            dest: &mut D,
+            len: usize,
+        ) -> io::Result<usize>
         where
             S: AsyncRead + Unpin,
             D: AsyncWrite + Unpin,
@@ -192,6 +197,7 @@ pub use fallback::{is_available, ZeroCopyTransfer};
 
 /// Data transfer abstraction
 pub struct DataTransfer {
+    #[allow(dead_code)] // Will be used when transfer methods are implemented
     inner: ZeroCopyTransfer,
     use_zero_copy: bool,
 }
