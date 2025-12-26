@@ -28,7 +28,7 @@ use mizuchi_uploadr::auth::{AuthRequest, Authenticator};
 #[cfg(feature = "tracing")]
 use mizuchi_uploadr::authz::opa::{OpaAuthorizer, OpaConfig};
 #[cfg(feature = "tracing")]
-use mizuchi_uploadr::authz::{AuthzRequest, Authorizer};
+use mizuchi_uploadr::authz::{Authorizer, AuthzRequest};
 #[cfg(feature = "tracing")]
 use mizuchi_uploadr::config::{BatchConfig, OtlpConfig, SamplingConfig, TracingConfig};
 #[cfg(feature = "tracing")]
@@ -66,7 +66,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Initializing tracing...");
     println!("   Endpoint: {}", tracing_config.otlp.endpoint);
     println!("   Service: {}", tracing_config.service_name);
-    println!("   Sampling: {} ({})", tracing_config.sampling.strategy, tracing_config.sampling.ratio);
+    println!(
+        "   Sampling: {} ({})",
+        tracing_config.sampling.strategy, tracing_config.sampling.ratio
+    );
 
     // Initialize tracing (guard will flush spans on drop)
     let _tracing_guard = init_tracing(&tracing_config)?;
@@ -144,7 +147,10 @@ async fn simulate_authorization() -> Result<(), Box<dyn std::error::Error>> {
     // This will create an "authz.opa" span
     // Note: This will fail because OPA is not running, but the span will still be created
     match authorizer.authorize(&request).await {
-        Ok(allowed) => println!("   ✅ Authorization: {}", if allowed { "allowed" } else { "denied" }),
+        Ok(allowed) => println!(
+            "   ✅ Authorization: {}",
+            if allowed { "allowed" } else { "denied" }
+        ),
         Err(e) => println!("   ⚠️  Authorization check failed (expected): {}", e),
     }
 
@@ -166,7 +172,8 @@ async fn simulate_upload() -> Result<(), Box<dyn std::error::Error>> {
 
     // Simulate S3 upload
     {
-        let _span = tracing::info_span!("s3.put_object", bucket = "my-bucket", key = "file.txt").entered();
+        let _span =
+            tracing::info_span!("s3.put_object", bucket = "my-bucket", key = "file.txt").entered();
         tracing::info!("Uploading to S3");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
@@ -183,4 +190,3 @@ fn main() {
     eprintln!("Run with: cargo run --example tracing_jaeger --features tracing");
     std::process::exit(1);
 }
-

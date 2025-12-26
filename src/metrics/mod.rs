@@ -4,8 +4,8 @@
 
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter, register_counter_vec, register_histogram, register_histogram_vec,
-    Counter, CounterVec, Histogram, HistogramVec,
+    register_counter, register_counter_vec, register_histogram, register_histogram_vec, Counter,
+    CounterVec, Histogram, HistogramVec,
 };
 
 lazy_static! {

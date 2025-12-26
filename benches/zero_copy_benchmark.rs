@@ -21,5 +21,9 @@ fn benchmark_data_transfer_creation(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, benchmark_zero_copy_available, benchmark_data_transfer_creation);
+criterion_group!(
+    benches,
+    benchmark_zero_copy_available,
+    benchmark_data_transfer_creation
+);
 criterion_main!(benches);

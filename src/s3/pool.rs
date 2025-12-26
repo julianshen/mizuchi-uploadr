@@ -101,8 +101,8 @@ impl S3ClientPool {
                 endpoint: bucket_config.s3.endpoint.clone(),
                 access_key: Some(credentials.access_key_id().to_string()),
                 secret_key: Some(credentials.secret_access_key().to_string()),
-                retry: None,    // Use defaults
-                timeout: None,  // Use defaults
+                retry: None,   // Use defaults
+                timeout: None, // Use defaults
             };
 
             // Create client
@@ -212,9 +212,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_pool_creation_single_bucket() {
-        let config = create_test_config(vec![
-            create_bucket_config("uploads", "my-bucket", "us-east-1"),
-        ]);
+        let config = create_test_config(vec![create_bucket_config(
+            "uploads",
+            "my-bucket",
+            "us-east-1",
+        )]);
         let pool = S3ClientPool::new(&config).await.unwrap();
         assert_eq!(pool.client_count(), 1);
     }
@@ -231,9 +233,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_client_exists() {
-        let config = create_test_config(vec![
-            create_bucket_config("uploads", "my-bucket", "us-east-1"),
-        ]);
+        let config = create_test_config(vec![create_bucket_config(
+            "uploads",
+            "my-bucket",
+            "us-east-1",
+        )]);
         let pool = S3ClientPool::new(&config).await.unwrap();
 
         let client = pool.get_client("uploads");
@@ -243,9 +247,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_client_not_exists() {
-        let config = create_test_config(vec![
-            create_bucket_config("uploads", "my-bucket", "us-east-1"),
-        ]);
+        let config = create_test_config(vec![create_bucket_config(
+            "uploads",
+            "my-bucket",
+            "us-east-1",
+        )]);
         let pool = S3ClientPool::new(&config).await.unwrap();
 
         let client = pool.get_client("nonexistent");

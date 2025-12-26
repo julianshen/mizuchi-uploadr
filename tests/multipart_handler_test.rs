@@ -66,10 +66,7 @@ mod tests {
         // NOTE: This will fail until we add with_client() to MultipartHandler
         let handler = MultipartHandler::with_client(s3_client);
 
-        let upload = handler
-            .create("test-bucket", "test-key.bin")
-            .await
-            .unwrap();
+        let upload = handler.create("test-bucket", "test-key.bin").await.unwrap();
 
         // Verify real upload_id from S3 (not a UUID)
         assert_eq!(
@@ -106,9 +103,7 @@ mod tests {
             .and(path("/test-key.bin"))
             .and(query_param("uploadId", "upload-123"))
             .and(query_param("partNumber", "1"))
-            .respond_with(
-                ResponseTemplate::new(200).insert_header("ETag", "\"part-etag-abc123\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"part-etag-abc123\""))
             .expect(1)
             .mount(&mock_server)
             .await;
@@ -117,17 +112,11 @@ mod tests {
         let handler = MultipartHandler::with_client(s3_client);
 
         // Create upload first
-        let mut upload = handler
-            .create("test-bucket", "test-key.bin")
-            .await
-            .unwrap();
+        let mut upload = handler.create("test-bucket", "test-key.bin").await.unwrap();
 
         // Upload a part (5MB minimum)
         let body = Bytes::from(vec![b'x'; 5 * 1024 * 1024]);
-        let part = handler
-            .upload_part(&mut upload, 1, body)
-            .await
-            .unwrap();
+        let part = handler.upload_part(&mut upload, 1, body).await.unwrap();
 
         assert_eq!(
             part.etag, "\"part-etag-abc123\"",
@@ -156,9 +145,7 @@ mod tests {
             .and(path("/large-file.bin"))
             .and(query_param("uploadId", "multi-upload"))
             .and(query_param("partNumber", "1"))
-            .respond_with(
-                ResponseTemplate::new(200).insert_header("ETag", "\"etag-part-1\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"etag-part-1\""))
             .mount(&mock_server)
             .await;
 
@@ -167,9 +154,7 @@ mod tests {
             .and(path("/large-file.bin"))
             .and(query_param("uploadId", "multi-upload"))
             .and(query_param("partNumber", "2"))
-            .respond_with(
-                ResponseTemplate::new(200).insert_header("ETag", "\"etag-part-2\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"etag-part-2\""))
             .mount(&mock_server)
             .await;
 
@@ -216,9 +201,7 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/complete-test.bin"))
             .and(query_param("uploadId", "complete-upload"))
-            .respond_with(
-                ResponseTemplate::new(200).insert_header("ETag", "\"part-etag\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"part-etag\""))
             .mount(&mock_server)
             .await;
 
@@ -352,9 +335,10 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/part-error.bin"))
             .and(query_param("uploadId", "part-error-upload"))
-            .respond_with(ResponseTemplate::new(500).set_body_string(
-                r#"<Error><Code>InternalError</Code></Error>"#,
-            ))
+            .respond_with(
+                ResponseTemplate::new(500)
+                    .set_body_string(r#"<Error><Code>InternalError</Code></Error>"#),
+            )
             .mount(&mock_server)
             .await;
 
@@ -386,9 +370,7 @@ mod tests {
         let handler = MultipartHandler::with_client(s3_client);
 
         // But we try to create upload for "different-bucket"
-        let result = handler
-            .create("different-bucket", "test-key")
-            .await;
+        let result = handler.create("different-bucket", "test-key").await;
 
         assert!(result.is_err(), "Should return error for bucket mismatch");
         let err = result.unwrap_err();

@@ -85,8 +85,7 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/large-file.bin"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("ETag", "\"1mb-file-etag-12345\""),
+                ResponseTemplate::new(200).insert_header("ETag", "\"1mb-file-etag-12345\""),
             )
             .expect(1)
             .mount(&mock_server)
@@ -98,7 +97,12 @@ mod tests {
         // Create 1MB body
         let body = Bytes::from(vec![b'a'; 1024 * 1024]);
         let result = handler
-            .upload("test-bucket", "large-file.bin", body, Some("application/octet-stream"))
+            .upload(
+                "test-bucket",
+                "large-file.bin",
+                body,
+                Some("application/octet-stream"),
+            )
             .await
             .unwrap();
 
@@ -119,10 +123,7 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/document.json"))
             .and(header("Content-Type", "application/json"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("ETag", "\"json-etag\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"json-etag\""))
             .expect(1)
             .mount(&mock_server)
             .await;
@@ -132,7 +133,12 @@ mod tests {
 
         let body = Bytes::from(r#"{"key": "value"}"#);
         let result = handler
-            .upload("test-bucket", "document.json", body, Some("application/json"))
+            .upload(
+                "test-bucket",
+                "document.json",
+                body,
+                Some("application/json"),
+            )
             .await
             .unwrap();
 
@@ -146,10 +152,7 @@ mod tests {
 
         Mock::given(method("PUT"))
             .and(path("/binary-file"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("ETag", "\"binary-etag\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"binary-etag\""))
             .expect(1)
             .mount(&mock_server)
             .await;
@@ -242,9 +245,7 @@ mod tests {
         let handler = PutObjectHandler::with_client(s3_client);
 
         let body = Bytes::from("test data");
-        let result = handler
-            .upload("test-bucket", "error-key", body, None)
-            .await;
+        let result = handler.upload("test-bucket", "error-key", body, None).await;
 
         assert!(result.is_err(), "Should return error for 500 response");
     }
@@ -264,10 +265,7 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/exact-body-test"))
             .and(body_bytes(expected_body.to_vec()))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("ETag", "\"exact-body-etag\""),
-            )
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"exact-body-etag\""))
             .expect(1)
             .mount(&mock_server)
             .await;
