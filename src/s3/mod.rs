@@ -320,7 +320,7 @@ impl S3Client {
 
         // Record response attributes in span
         let span = tracing::Span::current();
-        span.record("s3.etag", &etag.as_str());
+        span.record("s3.etag", etag.as_str());
         span.record("http.status_code", status.as_u16());
 
         tracing::info!(
@@ -390,7 +390,7 @@ impl S3Client {
 
         // Record response attributes in span
         let span = tracing::Span::current();
-        span.record("s3.upload_id", &upload_id.as_str());
+        span.record("s3.upload_id", upload_id.as_str());
         span.record("http.status_code", status.as_u16());
 
         tracing::info!(
@@ -469,7 +469,7 @@ impl S3Client {
 
         // Record response attributes in span
         let span = tracing::Span::current();
-        span.record("s3.etag", &etag.as_str());
+        span.record("s3.etag", etag.as_str());
         span.record("http.status_code", status.as_u16());
 
         tracing::info!(
@@ -560,7 +560,7 @@ impl S3Client {
 
         // Record response attributes in span
         let span = tracing::Span::current();
-        span.record("s3.etag", &etag.as_str());
+        span.record("s3.etag", etag.as_str());
         span.record("http.status_code", status.as_u16());
 
         tracing::info!(

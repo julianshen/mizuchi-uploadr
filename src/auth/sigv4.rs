@@ -7,7 +7,9 @@ use async_trait::async_trait;
 
 /// SigV4 Authenticator
 pub struct SigV4Authenticator {
+    #[allow(dead_code)] // Used in tests
     service: String,
+    #[allow(dead_code)] // Used in tests
     region: String,
     // In production, this would look up credentials from a store
     #[allow(dead_code)]

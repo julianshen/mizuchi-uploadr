@@ -68,7 +68,7 @@ impl MultipartHandler {
         let upload_id = uuid::Uuid::new_v4().to_string();
 
         // Record upload_id in span
-        tracing::Span::current().record("upload_id", &upload_id.as_str());
+        tracing::Span::current().record("upload_id", upload_id.as_str());
 
         tracing::info!(
             upload_id = %upload_id,
@@ -121,7 +121,7 @@ impl MultipartHandler {
         upload.parts.push(part.clone());
 
         // Record etag in span
-        tracing::Span::current().record("s3.etag", &part.etag.as_str());
+        tracing::Span::current().record("s3.etag", part.etag.as_str());
 
         tracing::info!(
             etag = %part.etag,
@@ -157,7 +157,7 @@ impl MultipartHandler {
         };
 
         // Record etag in span
-        tracing::Span::current().record("s3.etag", &result.etag.as_str());
+        tracing::Span::current().record("s3.etag", result.etag.as_str());
 
         tracing::info!(
             etag = %result.etag,

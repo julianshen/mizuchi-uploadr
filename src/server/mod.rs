@@ -5,6 +5,8 @@
 #[cfg(feature = "tracing")]
 pub mod http_tracing;
 
+pub mod pingora;
+
 use crate::config::Config;
 use std::net::SocketAddr;
 use thiserror::Error;
