@@ -18,13 +18,12 @@ mod linux {
     use super::*;
     use nix::fcntl::{splice, SpliceFFlags};
     use nix::unistd::pipe;
-    use std::os::fd::IntoRawFd;
-    use std::os::unix::io::{AsRawFd, RawFd};
+    use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 
     /// Zero-copy transfer using Linux splice(2)
     pub struct ZeroCopyTransfer {
-        pipe_read: RawFd,
-        pipe_write: RawFd,
+        pipe_read: OwnedFd,
+        pipe_write: OwnedFd,
         buffer_size: usize,
     }
 
@@ -36,8 +35,8 @@ mod linux {
             })?;
 
             Ok(Self {
-                pipe_read: pipe_read.into_raw_fd(),
-                pipe_write: pipe_write.into_raw_fd(),
+                pipe_read,
+                pipe_write,
                 buffer_size,
             })
         }
@@ -45,11 +44,11 @@ mod linux {
         /// Transfer data from source to destination using splice
         pub async fn transfer<S, D>(&self, source: &S, dest: &D, len: usize) -> io::Result<usize>
         where
-            S: AsRawFd,
-            D: AsRawFd,
+            S: AsFd,
+            D: AsFd,
         {
-            let source_fd = source.as_raw_fd();
-            let dest_fd = dest.as_raw_fd();
+            let source_fd: BorrowedFd = source.as_fd();
+            let dest_fd: BorrowedFd = dest.as_fd();
             let mut total_transferred = 0;
             let mut remaining = len;
 
@@ -58,9 +57,9 @@ mod linux {
 
                 // Splice from source to pipe
                 let spliced_to_pipe = match splice(
-                    source_fd,
+                    &source_fd,
                     None,
-                    self.pipe_write,
+                    &self.pipe_write,
                     None,
                     chunk_size,
                     SpliceFFlags::SPLICE_F_MOVE | SpliceFFlags::SPLICE_F_NONBLOCK,
@@ -83,9 +82,9 @@ mod linux {
                 let mut pipe_remaining = spliced_to_pipe;
                 while pipe_remaining > 0 {
                     match splice(
-                        self.pipe_read,
+                        &self.pipe_read,
                         None,
-                        dest_fd,
+                        &dest_fd,
                         None,
                         pipe_remaining,
                         SpliceFFlags::SPLICE_F_MOVE | SpliceFFlags::SPLICE_F_NONBLOCK,
@@ -112,14 +111,7 @@ mod linux {
         }
     }
 
-    impl Drop for ZeroCopyTransfer {
-        fn drop(&mut self) {
-            unsafe {
-                libc::close(self.pipe_read);
-                libc::close(self.pipe_write);
-            }
-        }
-    }
+    // OwnedFd automatically closes when dropped, so no manual Drop impl needed
 
     /// Check if zero-copy is available
     pub fn is_available() -> bool {
