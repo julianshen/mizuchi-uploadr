@@ -1,9 +1,6 @@
 //! PutObject Handler Integration Tests
 //!
 //! Tests for the PutObject upload handler with actual S3 client integration.
-//! These tests follow TDD methodology - RED phase: tests are written before implementation.
-//!
-//! # Task 9: Phase 2.1 - Simple PutObject Handler
 //!
 //! ## Test Coverage
 //!
@@ -12,6 +9,7 @@
 //! - Error handling for S3 failures
 //! - Content-Type preservation
 //! - ETag verification (real S3 response, not fake UUID)
+//! - Bucket mismatch validation
 
 #[cfg(test)]
 mod tests {
@@ -21,6 +19,20 @@ mod tests {
     use mizuchi_uploadr::upload::UploadHandler;
     use wiremock::matchers::{body_bytes, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// Helper function to create an S3 client pointing to a mock server
+    fn create_test_s3_client(mock_server: &MockServer, bucket: &str) -> S3Client {
+        let s3_config = S3ClientConfig {
+            bucket: bucket.to_string(),
+            region: "us-east-1".to_string(),
+            endpoint: Some(mock_server.uri()),
+            access_key: Some("test-access".to_string()),
+            secret_key: Some("test-secret".to_string()),
+            retry: None,
+            timeout: None,
+        };
+        S3Client::new(s3_config).unwrap()
+    }
 
     // ========================================================================
     // TEST: Small File Upload (1MB)
@@ -47,20 +59,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        // Create S3 client pointing to mock server
-        let s3_config = S3ClientConfig {
-            bucket: "test-bucket".to_string(),
-            region: "us-east-1".to_string(),
-            endpoint: Some(mock_server.uri()),
-            access_key: Some("test-access".to_string()),
-            secret_key: Some("test-secret".to_string()),
-            retry: None,
-            timeout: None,
-        };
-        let s3_client = S3Client::new(s3_config).unwrap();
-
-        // Create handler with S3 client
-        // NOTE: This will fail until we modify PutObjectHandler to accept S3Client
+        let s3_client = create_test_s3_client(&mock_server, "test-bucket");
         let handler = PutObjectHandler::with_client(s3_client);
 
         // Upload small file (1KB for test)
@@ -93,17 +92,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let s3_config = S3ClientConfig {
-            bucket: "test-bucket".to_string(),
-            region: "us-east-1".to_string(),
-            endpoint: Some(mock_server.uri()),
-            access_key: Some("test-access".to_string()),
-            secret_key: Some("test-secret".to_string()),
-            retry: None,
-            timeout: None,
-        };
-        let s3_client = S3Client::new(s3_config).unwrap();
-
+        let s3_client = create_test_s3_client(&mock_server, "test-bucket");
         let handler = PutObjectHandler::with_client(s3_client);
 
         // Create 1MB body
@@ -138,17 +127,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let s3_config = S3ClientConfig {
-            bucket: "test-bucket".to_string(),
-            region: "us-east-1".to_string(),
-            endpoint: Some(mock_server.uri()),
-            access_key: Some("test-access".to_string()),
-            secret_key: Some("test-secret".to_string()),
-            retry: None,
-            timeout: None,
-        };
-        let s3_client = S3Client::new(s3_config).unwrap();
-
+        let s3_client = create_test_s3_client(&mock_server, "test-bucket");
         let handler = PutObjectHandler::with_client(s3_client);
 
         let body = Bytes::from(r#"{"key": "value"}"#);
@@ -175,17 +154,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let s3_config = S3ClientConfig {
-            bucket: "test-bucket".to_string(),
-            region: "us-east-1".to_string(),
-            endpoint: Some(mock_server.uri()),
-            access_key: Some("test-access".to_string()),
-            secret_key: Some("test-secret".to_string()),
-            retry: None,
-            timeout: None,
-        };
-        let s3_client = S3Client::new(s3_config).unwrap();
-
+        let s3_client = create_test_s3_client(&mock_server, "test-bucket");
         let handler = PutObjectHandler::with_client(s3_client);
 
         let body = Bytes::from(vec![0u8; 256]);
@@ -219,17 +188,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let s3_config = S3ClientConfig {
-            bucket: "test-bucket".to_string(),
-            region: "us-east-1".to_string(),
-            endpoint: Some(mock_server.uri()),
-            access_key: Some("test-access".to_string()),
-            secret_key: Some("test-secret".to_string()),
-            retry: None,
-            timeout: None,
-        };
-        let s3_client = S3Client::new(s3_config).unwrap();
-
+        let s3_client = create_test_s3_client(&mock_server, "test-bucket");
         let handler = PutObjectHandler::with_client(s3_client);
 
         let body = Bytes::from("test data");
@@ -313,17 +272,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let s3_config = S3ClientConfig {
-            bucket: "test-bucket".to_string(),
-            region: "us-east-1".to_string(),
-            endpoint: Some(mock_server.uri()),
-            access_key: Some("test-access".to_string()),
-            secret_key: Some("test-secret".to_string()),
-            retry: None,
-            timeout: None,
-        };
-        let s3_client = S3Client::new(s3_config).unwrap();
-
+        let s3_client = create_test_s3_client(&mock_server, "test-bucket");
         let handler = PutObjectHandler::with_client(s3_client);
 
         let body = Bytes::from(&expected_body[..]);
@@ -333,5 +282,33 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.etag, "\"exact-body-etag\"");
+    }
+
+    // ========================================================================
+    // TEST: Bucket Validation
+    // ========================================================================
+
+    /// Test that bucket mismatch between handler and upload call is rejected
+    #[tokio::test]
+    async fn test_upload_rejects_bucket_mismatch() {
+        let mock_server = MockServer::start().await;
+
+        // Client is configured for "configured-bucket"
+        let s3_client = create_test_s3_client(&mock_server, "configured-bucket");
+        let handler = PutObjectHandler::with_client(s3_client);
+
+        let body = Bytes::from("test data");
+        // But we try to upload to "different-bucket"
+        let result = handler
+            .upload("different-bucket", "test-key", body, None)
+            .await;
+
+        assert!(result.is_err(), "Should return error for bucket mismatch");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("Bucket mismatch"),
+            "Error should indicate bucket mismatch: {}",
+            err
+        );
     }
 }

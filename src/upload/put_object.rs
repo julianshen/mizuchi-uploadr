@@ -113,6 +113,19 @@ impl UploadHandler for PutObjectHandler {
 
         // Use S3 client if available, otherwise use placeholder for legacy behavior
         let upload_result = if let Some(client) = &self.client {
+            // Validate bucket matches client configuration
+            if bucket != client.bucket() {
+                tracing::error!(
+                    expected_bucket = %client.bucket(),
+                    actual_bucket = %bucket,
+                    "Bucket mismatch: upload requested for different bucket than client configured"
+                );
+                return Err(UploadError::S3Error(format!(
+                    "Bucket mismatch: client configured for '{}' but upload requested for '{}'",
+                    client.bucket(),
+                    bucket
+                )));
+            }
             // Real S3 upload via client
             client
                 .put_object(key, body, content_type)
@@ -121,6 +134,12 @@ impl UploadHandler for PutObjectHandler {
                 .map_err(|e| UploadError::S3Error(e.to_string()))
         } else {
             // Legacy placeholder behavior (for backward compatibility with existing tests)
+            tracing::warn!(
+                bucket = %bucket,
+                key = %key,
+                "Using legacy placeholder path: no S3 client configured, returning fake ETag. \
+                 This should only happen in tests."
+            );
             Ok(format!("\"{}\"", uuid::Uuid::new_v4()))
         };
 
