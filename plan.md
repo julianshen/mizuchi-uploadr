@@ -926,7 +926,7 @@ cargo test  # All tests should PASS
 
 # 5. Run full test suite before commit
 cargo test --all-features
-cargo clippy -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --check
 
 # 6. Create PR
