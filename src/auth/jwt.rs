@@ -77,13 +77,23 @@ impl JwtAuthenticator {
 
 #[async_trait]
 impl Authenticator for JwtAuthenticator {
+    #[cfg_attr(feature = "tracing", tracing::instrument(
+        name = "auth.jwt",
+        skip(self, request),
+        fields(
+            auth.method = "jwt",
+            auth.token_present = %self.extract_token(request).is_some(),
+            otel.kind = "internal"
+        ),
+        err
+    ))]
     async fn authenticate(&self, request: &AuthRequest) -> Result<AuthResult, AuthError> {
-        let token = self
-            .extract_token(request)
-            .ok_or(AuthError::MissingAuth)?;
+        let token = self.extract_token(request).ok_or(AuthError::MissingAuth)?;
 
-        let token_data = decode::<Claims>(&token, &self.decoding_key, &self.validation)
-            .map_err(|e| match e.kind() {
+        let token_data =
+            decode::<Claims>(&token, &self.decoding_key, &self.validation).map_err(|e| match e
+                .kind()
+            {
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
                 jsonwebtoken::errors::ErrorKind::InvalidSignature => AuthError::InvalidSignature,
                 _ => AuthError::InvalidToken(e.to_string()),
@@ -96,6 +106,12 @@ impl Authenticator for JwtAuthenticator {
         if let Some(aud) = &token_data.claims.aud {
             claims_map.insert("aud".into(), serde_json::Value::String(aud.clone()));
         }
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            subject = %token_data.claims.sub,
+            "JWT authentication successful"
+        );
 
         Ok(AuthResult {
             subject: token_data.claims.sub,
@@ -110,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_jwt_authenticator_creation() {
-        let auth = JwtAuthenticator::new_hs256("secret");
+        let _auth = JwtAuthenticator::new_hs256("secret");
         assert!(true); // Just verify it doesn't panic
     }
 

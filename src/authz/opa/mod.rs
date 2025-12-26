@@ -3,7 +3,7 @@
 //! Provides policy-based access control using OPA.
 //! Reference: https://github.com/julianshen/yatagarasu/tree/master/src/authz/opa
 
-use super::{AuthzError, AuthzRequest, Authorizer};
+use super::{Authorizer, AuthzError, AuthzRequest};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +53,17 @@ impl OpaAuthorizer {
 
 #[async_trait]
 impl Authorizer for OpaAuthorizer {
+    #[cfg_attr(feature = "tracing", tracing::instrument(
+        name = "authz.opa",
+        skip(self, request),
+        fields(
+            authz.method = "opa",
+            authz.action = %request.action,
+            authz.resource_type = %extract_resource_type(&request.resource),
+            otel.kind = "internal"
+        ),
+        err
+    ))]
     async fn authorize(&self, request: &AuthzRequest) -> Result<bool, AuthzError> {
         let url = format!("{}/v1/data/{}", self.config.url, self.config.policy_path);
 
@@ -85,7 +96,27 @@ impl Authorizer for OpaAuthorizer {
             .await
             .map_err(|e| AuthzError::BackendError(e.to_string()))?;
 
-        Ok(opa_response.result.unwrap_or(false))
+        let allowed = opa_response.result.unwrap_or(false);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            decision = %if allowed { "allow" } else { "deny" },
+            "OPA authorization decision"
+        );
+
+        Ok(allowed)
+    }
+}
+
+/// Extract resource type from resource path (no PII)
+#[cfg(feature = "tracing")]
+fn extract_resource_type(resource: &str) -> String {
+    if resource.starts_with("bucket/") {
+        "bucket".to_string()
+    } else if resource.contains('/') {
+        "object".to_string()
+    } else {
+        "unknown".to_string()
     }
 }
 

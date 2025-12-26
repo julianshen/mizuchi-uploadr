@@ -13,7 +13,7 @@
 
 | Component               | Status         | Progress | PRs   | Tests      |
 | ----------------------- | -------------- | -------- | ----- | ---------- |
-| **Tracing**             | 🚧 In Progress | 80%      | 18/22 | ✅ Passing |
+| **Tracing**             | 🚧 In Progress | 85%      | 19/22 | ✅ Passing |
 | **Core Infrastructure** | ⏳ Not Started | 0%       | 0/9   | -          |
 | **Upload Operations**   | ⏳ Not Started | 0%       | 0/9   | -          |
 | **Authentication**      | ⏳ Not Started | 0%       | 0/9   | -          |
@@ -22,13 +22,13 @@
 
 ### Tracing Progress Detail
 
-| Phase                | Status         | PRs    | Tests       | Completion |
-| -------------------- | -------------- | ------ | ----------- | ---------- |
-| 1. Configuration     | ✅ Complete    | #4     | 8/8 passing | 100%       |
-| 2. OTel Integration  | ✅ Complete    | #5-16  | All passing | 100%       |
-| 3. Instrumentation   | ✅ Complete    | #13    | All passing | 100%       |
-| 4. Advanced Features | 🚧 In Progress | #17-18 | 9/9 passing | 50%        |
-| 5. Production Ready  | ⏳ Not Started | -      | 0/8         | 0%         |
+| Phase                | Status         | PRs    | Tests         | Completion |
+| -------------------- | -------------- | ------ | ------------- | ---------- |
+| 1. Configuration     | ✅ Complete    | #4     | 8/8 passing   | 100%       |
+| 2. OTel Integration  | ✅ Complete    | #5-16  | All passing   | 100%       |
+| 3. Instrumentation   | ✅ Complete    | #13    | All passing   | 100%       |
+| 4. Advanced Features | 🚧 In Progress | #17-19 | 14/14 passing | 75%        |
+| 5. Production Ready  | ⏳ Not Started | -      | 0/8           | 0%         |
 
 ---
 
@@ -45,13 +45,14 @@
 - **Files**: `src/tracing/instrumentation.rs`, `tests/context_propagation_test.rs`
 - **Commit**: 4d30ca3
 
-#### 2. Complete Tracing Phase 4.3 - Auth/AuthZ Tracing
+#### 2. ✅ Complete Tracing Phase 4.3 - Auth/AuthZ Tracing
 
+- **Status**: ✅ COMPLETE (2025-12-25)
 - **Goal**: Add tracing to authentication and authorization operations
-- **Estimated**: 2-3 days
-- **Depends On**: Task 1
-- **Impact**: Complete observability for security operations
+- **Completed**: Instrumentation added to all auth/authz operations
+- **Impact**: Complete observability for security operations with no PII leakage
 - **Files**: `src/auth/jwt.rs`, `src/auth/sigv4.rs`, `src/authz/opa/mod.rs`, `src/authz/openfga/mod.rs`
+- **Commit**: 301dd24
 
 #### 3. Complete Tracing Phase 5 - Production Readiness
 
