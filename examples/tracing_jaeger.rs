@@ -134,6 +134,8 @@ async fn simulate_authorization() -> Result<(), Box<dyn std::error::Error>> {
     let authorizer = OpaAuthorizer::new(OpaConfig {
         url: "http://localhost:8181".to_string(),
         policy_path: "mizuchi/allow".to_string(),
+        timeout: None,
+        cache_ttl: None,
     });
 
     // Create a mock authz request
