@@ -142,43 +142,44 @@ mod tests {
     // TEST: RS256 Algorithm
     // ========================================================================
 
-    // RSA test key pair (2048-bit, for testing only)
-    const RSA_PRIVATE_KEY: &str = r#"-----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA2mKqH0dSgFzXNpHVQNB3xJ2DxYK6YQGB9lGPkXcV7VzVCwGc
-FvRJHvRqYXKBHXB8j8CYXF8Xb5xMjFQqYjHZs5T4EEmVq+y0SQYeBKVrBQHB1NAJ
-xLb7YvDRQDmPvVBY6YxidAFiXCYgfCnxSjLKMHX2VR1sJzJXGBMCQDpHNGFrYqKy
-E5FVBcA7OjL9hJGhVvRXSqKCCjKLDZP7LfDACFAP0GCKR9zMn3TH6sOiS9xyVCqC
-XCFYB8RNlVFNqHFRBdGmJ3MEfnS0VEKqhRdIQvR8/5MRr9y9mSMTQq8TjBfPB6Ot
-PKWJMPqBENBsLsT/5fLMNh5mSfKqmHGqfpYKHwIDAQABAoIBAC5RgZ+hBx7xHnFZ
-nQmY5lVMpGfqC0JWLNBdKDbfqCF8Q2EMl0HEGFZpNBPOBcO3WVFh0PFRYqBB5C2Z
-B5lQDgLfFVKhF8ZLNkVXLmCkVYwPXLPmh9K9gFwBynLIrQ3M4eH0TZejwql+w+5L
-gvZdg0k8Q0mKthZjNVqSqYkjI3pKdKKk7VOeWbCBfYfMHXJ0fPkMrF3v3DnVcuxH
-HGF0sM4P4D4FqKJVLrSyZE+Q6DXkRl4qf4Oq6YZFB3E7F6O9Fj0cE4bJxPACxA8L
-hBHNNHDfQMn9K8pTH0zQa0U0tkHQMdA3bXjqgJGqL9j3tQT6PMbXg0GxNQAhRP5p
-dj+pT0ECgYEA7rYi8IlJ4T1FWRFWJPtGqi3pC0WVU5H0Hskq4M0u0qd1bDCqS1aK
-BOHaGPVy86qq/80D9RslKkPJFnFqHgC1MBxOCv5bFPeGGWTL7BT/LRb8YnLwCm0v
-mh/U0iSLzqoTt8qTCJWLPvxvDECmBq0dQ+jPMSlPqMbGhovASgmLQQ8CgYEA6XZq
-MB4mhO4C4N9ovzmYJQf5raJNBk8ZfJQPvkpa3RleNLRBtScEf/sHlLZBVBkQj0cS
-IkzNB8TPVQ8PfBQvLkCYVLKpqPnJurg0zhj5C0M0X7kE5BJ0HunLPFEqdH/Seoh7
-hM0m6vN2zC7RTTGB+K/1dL5XZgneFYlpFqMYOIkCgYEAwUz3T3YWVJ1KcNYcC0yx
-qJWMtlN6BRPvVZmMkDDIkU5qal3KdGxXB5M4pc0akxPxVxBzksyRLqTP2eMPFGqy
-KVFRsFZ3Y0z/oaIB1r6m0ETN8VJ4vZGBXF+KqfBCDLsB3PCMN6gBf7vjLDGGBLwk
-J4YkVLxBwMBQ5nL6f7K3bLsCgYAtX9NKsvLxepSqFuSsLnJgChBMmT/Z08vFJ1u/
-jl6cI2S5hrMD+R2xBJKBiEPF9C0lK0gP5XHN1aLfwMDeJyMepkjfBP+P0Xf5f+HM
-nxvDgMfKLqCr2c7Lj3FJ5q8V8LX6VQ5qhJHGnO1RDSHdN+X4aT5+M9RQPZLRJE0N
-dTqKcQKBgQCJ3axJRzMA5ebKqAaRURe36XQsEYCrPl1e1LE0NnKdMNUklhYHRDCr
-FXlQ8GepzSFhQkfg0rqM4F4mYBWBNjv1D+d3Ckfn8+FH9UxPD6Dz2J+JfRPdKK5M
-ufHjDKbjTGA6hI1k8CDTB4vKv0VBz2hCN9eT5nyp3g6k6AZycKP6vw==
------END RSA PRIVATE KEY-----"#;
+    // RSA test key pair (2048-bit, PKCS#8 format, for testing only)
+    const RSA_PRIVATE_KEY: &str = r#"-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCioG32/fqHZgAt
+gnXnTn/VWKM+ouTdtrP8p7DdPDH894uW48oUrVFG+YICO7nUYNlJ0LBVYlLxLNbR
+3VVRWAO8gKf2knMW1D4Mnmve1xPl01Wgkdcg42idaNJcQn1cHygvJJo0LE0/5l3l
+1AuvV9Kjg/ibDMYxMwqm0KRlk4kHvcJW3AT7urp6faxszBkE0F//NxXSYdxocru0
+cyDmzeloYN8xwSIWxQoBNVKQNDmT7NnKs6P1TUB2pUS6mUqZY65C3iXu3iefbaKz
+d7bjbwb8py+RC7L7t7jSg7oq663FPTwycNEVFYemyJU7WCqGjIxkQrpLdb9rLOgN
+8+OQsd+fAgMBAAECggEAD21aoSicwIVrlOWgW631sH51FfcL8QBo+JnLzGDueQne
+oxS+0dFTOYFn1OBnk38QfdEfOSpXpetUAZqWgl3wFMy7okdoRY0iyb2pi/0pNQ8k
+O1Q6bTNFdFFCS2A/ViLahAZb3oEpXttyot/Hr/2LzNkzFzpR/s7RvttiDQS+5g3y
+WhJmyvgD7ui5HWpRP2dphonJt9JgbBHDYdHjc0G2mkCdQ1ZIOopV4N2nqe/4Q4tB
+mLboyLdBJm0Z5VbUeojDj6L/HUDTbT2QsZ9IsD+iodIt+8CcnpTGeZ2f3PYJ5Km1
+5ddGb6qru0rthTC2SK4LBfkIq8MqG3bmnnbG27iAUQKBgQDiiL92/4j4lioIuM3a
+sxzvUVnPnf2eWkuqrMcXoab75fLDxEZIpUjbOyCAhD0qshqUlPIdCgdUbZBOGbME
+GvV8ut0Tal5j1qE92AkALj5FITHSAW6nbCrXDViR1r/9k+0IHAaJbNM3+1pz46d+
+NrB1dHe2B5g46qgTOOKJ3RcFuQKBgQC3x6gm0gldyu807h4reKs1I37NfRDZHG78
+IQayoHoSHhzs26XwWGKDDj5ONqPUjcHAnrJFVr6eWMqAWU2jYAgRzuOEZ24nblT7
+b2zOhw70nDe7Hm7zyx4nTYC+4/dbldf7xnuQIcTo2eRwz2Ig0/GDmm4Nf0qHAu1r
+J/EN1RE8FwKBgQCaqVJPJFeXoK5CFio1TmRK3/e5T9x/6JYQiLXE5JDlGjGMhsyV
+fIMpakzecWpxY/fRyX8jZF1svwDu0YzvGJjR96JIRy76aubbGkvK28eX2vnwrxml
+JKx69pmpuDyMHBqQltG/sZTje7Bdvufzu9Lt3f59QOIkudDWjtfb2B6HwQKBgC6Z
+ACi/rsJKVzabfajWEssJcfhWUrRKAlYJZbJbADihzAG+e6eiMXA7Z07bidS2EL9v
+PZJZOUHbD5VVj1ryWXlydLu4ofR7hC6whO0kz4T0KylVwRotkTqz6wX7tVdSeg4L
+uH7GITBNNx/nZWEffCg7OtZPRS1Qb7Rwzy0LrjAHAoGBALwuyWRGY+tdrbQwGwFd
+ODUjHpkVlAH6siEi4u734RorwYa8h4WsZjUInr7m9fp55Wfe/3VBUgnM6YkrecVk
+1EaTn7UHAlT+kQ2c5BQ13n9kc6iZP/Mz/aXm/ZTEpJL8OqOSrEJYZck2bqKwZ19S
+CiKoEJ3Dnq+RVO82q/iriqT8
+-----END PRIVATE KEY-----"#;
 
     const RSA_PUBLIC_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2mKqH0dSgFzXNpHVQNB3
-xJ2DxYK6YQGB9lGPkXcV7VzVCwGcFvRJHvRqYXKBHXB8j8CYXF8Xb5xMjFQqYjHZ
-s5T4EEmVq+y0SQYeBKVrBQHB1NAJxLb7YvDRQDmPvVBY6YxidAFiXCYgfCnxSjLK
-MHX2VR1sJzJXGBMCQDpHNGFrYqKyE5FVBcA7OjL9hJGhVvRXSqKCCjKLDZP7LfDA
-CFAP0GCKR9zMn3TH6sOiS9xyVCqCXCFYB8RNlVFNqHFRBdGmJ3MEfnS0VEKqhRdI
-QvR8/5MRr9y9mSMTQq8TjBfPB6OtPKWJMPqBENBsLsT/5fLMNh5mSfKqmHGqfpYK
-HwIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoqBt9v36h2YALYJ1505/
+1VijPqLk3baz/Kew3Twx/PeLluPKFK1RRvmCAju51GDZSdCwVWJS8SzW0d1VUVgD
+vICn9pJzFtQ+DJ5r3tcT5dNVoJHXIONonWjSXEJ9XB8oLySaNCxNP+Zd5dQLr1fS
+o4P4mwzGMTMKptCkZZOJB73CVtwE+7q6en2sbMwZBNBf/zcV0mHcaHK7tHMg5s3p
+aGDfMcEiFsUKATVSkDQ5k+zZyrOj9U1AdqVEuplKmWOuQt4l7t4nn22is3e2428G
+/KcvkQuy+7e40oO6KuutxT08MnDRFRWHpsiVO1gqhoyMZEK6S3W/ayzoDfPjkLHf
+nwIDAQAB
 -----END PUBLIC KEY-----"#;
 
     fn create_rs256_token(claims: &Claims) -> String {
@@ -239,19 +240,19 @@ mwIDAQAB
 
     /// Test ES256 (ECDSA with P-256) token validation
     ///
-    /// RED: Will fail because ES256 support doesn't exist yet
+    /// GREEN: ES256 support added via new_es256()
     #[tokio::test]
     async fn test_valid_es256_token_accepted() {
-        // EC P-256 test keys
-        let ec_private_key = r#"-----BEGIN EC PRIVATE KEY-----
-MHQCAQEEIBYr1/e/tV/9tlEPQbXbVaLsKnMFWrdkFjqwnqUMB3TpoAcGBSuBBAAK
-oUQDQgAEm5vFf9scheUkkBoDF3ZxLnz6A32qfq3VYqXyCeCxPz3M7rOrVV3DDjut
-Onp3OVpDBj3XvdhNiTloMAwkS+rC5A==
------END EC PRIVATE KEY-----"#;
+        // EC P-256 (secp256r1) test keys in PKCS#8 format
+        let ec_private_key = r#"-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg3dpHBGw+qKVN15qn
+hPjY/Lh9SUooPZx13tcRdi+Gj++hRANCAARtMxM0KEkKrYTU2aQg81IOFFl5Lvs/
+aqlY8ML+o0rzdQ671jbpVjurBUfgzoPyM9ek3yNIbCAJ1UKkjloSJiBu
+-----END PRIVATE KEY-----"#;
 
         let ec_public_key = r#"-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEm5vFf9scheUkkBoDF3ZxLnz6A32q
-fq3VYqXyCeCxPz3M7rOrVV3DDjutOnp3OVpDBj3XvdhNiTloMAwkS+rC5A==
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbTMTNChJCq2E1NmkIPNSDhRZeS77
+P2qpWPDC/qNK83UOu9Y26VY7qwVH4M6D8jPXpN8jSGwgCdVCpI5aEiYgbg==
 -----END PUBLIC KEY-----"#;
 
         // This should create an ES256 authenticator
@@ -281,8 +282,10 @@ fq3VYqXyCeCxPz3M7rOrVV3DDjutOnp3OVpDBj3XvdhNiTloMAwkS+rC5A==
 
     /// Test JWKS endpoint fetching and key resolution
     ///
-    /// RED: Will fail because JwksAuthenticator doesn't exist yet
+    /// This test requires a real JWKS endpoint, so it's ignored by default.
+    /// Run with: cargo test -- --ignored test_jwks_authenticator_fetches_keys
     #[tokio::test]
+    #[ignore = "Requires real JWKS endpoint"]
     async fn test_jwks_authenticator_fetches_keys() {
         use mizuchi_uploadr::auth::jwks::JwksAuthenticator;
 
@@ -295,7 +298,7 @@ fq3VYqXyCeCxPz3M7rOrVV3DDjutOnp3OVpDBj3XvdhNiTloMAwkS+rC5A==
             .expect("Should create JWKS authenticator");
 
         // The authenticator should have fetched and cached keys
-        assert!(auth.has_keys(), "JWKS authenticator should have keys");
+        assert!(auth.has_keys().await, "JWKS authenticator should have keys");
     }
 
     /// Test JWKS key selection by kid
@@ -331,9 +334,9 @@ fq3VYqXyCeCxPz3M7rOrVV3DDjutOnp3OVpDBj3XvdhNiTloMAwkS+rC5A==
         let auth = JwksAuthenticator::from_json(jwks_json).expect("Should parse JWKS");
 
         // Should be able to find key by kid
-        assert!(auth.find_key("key-1").is_some(), "Should find key-1");
-        assert!(auth.find_key("key-2").is_some(), "Should find key-2");
-        assert!(auth.find_key("key-3").is_none(), "Should not find key-3");
+        assert!(auth.find_key("key-1").await.is_some(), "Should find key-1");
+        assert!(auth.find_key("key-2").await.is_some(), "Should find key-2");
+        assert!(auth.find_key("key-3").await.is_none(), "Should not find key-3");
     }
 
     /// Test JWKS key caching
@@ -357,28 +360,26 @@ fq3VYqXyCeCxPz3M7rOrVV3DDjutOnp3OVpDBj3XvdhNiTloMAwkS+rC5A==
 
     /// Test JWKS-based token validation
     ///
-    /// RED: Will fail because JwksAuthenticator doesn't exist yet
+    /// GREEN: JwksAuthenticator implemented
     #[tokio::test]
     async fn test_jwks_validates_token_with_kid() {
         use mizuchi_uploadr::auth::jwks::JwksAuthenticator;
 
-        // JWKS with our test key
-        let jwks_json = format!(
-            r#"{{
+        // JWKS with our test key (modulus matches RSA_PUBLIC_KEY)
+        let jwks_json = r#"{
             "keys": [
-                {{
+                {
                     "kty": "RSA",
                     "kid": "test-key-1",
                     "use": "sig",
                     "alg": "RS256",
-                    "n": "2mKqH0dSgFzXNpHVQNB3xJ2DxYK6YQGB9lGPkXcV7VzVCwGcFvRJHvRqYXKBHXB8j8CYXF8Xb5xMjFQqYjHZs5T4EEmVq-y0SQYeBKVrBQHB1NAJxLb7YvDRQDmPvVBY6YxidAFiXCYgfCnxSjLKMHX2VR1sJzJXGBMCQDpHNGFrYqKyE5FVBcA7OjL9hJGhVvRXSqKCCjKLDZP7LfDACFAP0GCKR9zMn3TH6sOiS9xyVCqCXCFYB8RNlVFNqHFRBdGmJ3MEfnS0VEKqhRdIQvR8_5MRr9y9mSMTQq8TjBfPB6OtPKWJMPqBENBsLsT_5fLMNh5mSfKqmHGqfpYKHw",
+                    "n": "oqBt9v36h2YALYJ1505_1VijPqLk3baz_Kew3Twx_PeLluPKFK1RRvmCAju51GDZSdCwVWJS8SzW0d1VUVgDvICn9pJzFtQ-DJ5r3tcT5dNVoJHXIONonWjSXEJ9XB8oLySaNCxNP-Zd5dQLr1fSo4P4mwzGMTMKptCkZZOJB73CVtwE-7q6en2sbMwZBNBf_zcV0mHcaHK7tHMg5s3paGDfMcEiFsUKATVSkDQ5k-zZyrOj9U1AdqVEuplKmWOuQt4l7t4nn22is3e2428G_KcvkQuy-7e40oO6KuutxT08MnDRFRWHpsiVO1gqhoyMZEK6S3W_ayzoDfPjkLHfnw",
                     "e": "AQAB"
-                }}
+                }
             ]
-        }}"#
-        );
+        }"#;
 
-        let auth = JwksAuthenticator::from_json(&jwks_json).expect("Should parse JWKS");
+        let auth = JwksAuthenticator::from_json(jwks_json).expect("Should parse JWKS");
 
         // Create token with kid in header
         use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};

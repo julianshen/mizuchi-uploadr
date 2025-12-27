@@ -22,6 +22,22 @@ pub struct Claims {
 }
 
 /// JWT Authenticator
+///
+/// Supports HS256 (HMAC), RS256 (RSA), and ES256 (ECDSA P-256) algorithms.
+///
+/// # Example
+///
+/// ```
+/// use mizuchi_uploadr::auth::jwt::JwtAuthenticator;
+///
+/// // HS256 with secret
+/// let auth = JwtAuthenticator::new_hs256("my-secret");
+///
+/// // With issuer and audience validation
+/// let auth = JwtAuthenticator::new_hs256("my-secret")
+///     .with_issuer("https://auth.example.com")
+///     .with_audience("my-api");
+/// ```
 pub struct JwtAuthenticator {
     decoding_key: DecodingKey,
     validation: Validation,
@@ -33,6 +49,7 @@ impl JwtAuthenticator {
         let decoding_key = DecodingKey::from_secret(secret.as_bytes());
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
+        validation.validate_aud = false; // Only validate aud when explicitly set
 
         Self {
             decoding_key,
@@ -46,11 +63,47 @@ impl JwtAuthenticator {
             .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
         let mut validation = Validation::new(Algorithm::RS256);
         validation.validate_exp = true;
+        validation.validate_aud = false; // Only validate aud when explicitly set
 
         Ok(Self {
             decoding_key,
             validation,
         })
+    }
+
+    /// Create a new JWT authenticator with an EC public key (ES256)
+    ///
+    /// Uses ECDSA with P-256 curve (also known as secp256r1 or prime256v1).
+    pub fn new_es256(public_key_pem: &str) -> Result<Self, AuthError> {
+        let decoding_key = DecodingKey::from_ec_pem(public_key_pem.as_bytes())
+            .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
+        let mut validation = Validation::new(Algorithm::ES256);
+        validation.validate_exp = true;
+        validation.validate_aud = false; // Only validate aud when explicitly set
+
+        Ok(Self {
+            decoding_key,
+            validation,
+        })
+    }
+
+    /// Set the required issuer (`iss` claim)
+    ///
+    /// Tokens without this issuer will be rejected.
+    #[must_use]
+    pub fn with_issuer(mut self, issuer: &str) -> Self {
+        self.validation.set_issuer(&[issuer]);
+        self
+    }
+
+    /// Set the required audience (`aud` claim)
+    ///
+    /// Tokens without this audience will be rejected.
+    #[must_use]
+    pub fn with_audience(mut self, audience: &str) -> Self {
+        self.validation.set_audience(&[audience]);
+        self.validation.validate_aud = true; // Enable aud validation when audience is set
+        self
     }
 
     /// Extract token from request
