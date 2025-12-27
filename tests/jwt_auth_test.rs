@@ -494,4 +494,98 @@ P2qpWPDC/qNK83UOu9Y26VY7qwVH4M6D8jPXpN8jSGwgCdVCpI5aEiYgbg==
             "Token with wrong audience should be rejected"
         );
     }
+
+    // ========================================================================
+    // TEST: JWKS Issuer/Audience Validation (Refactor phase)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_jwks_with_issuer_validation() {
+        use mizuchi_uploadr::auth::jwks::JwksAuthenticator;
+
+        let jwks_json = r#"{
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "kid": "test-key-1",
+                    "use": "sig",
+                    "alg": "RS256",
+                    "n": "oqBt9v36h2YALYJ1505_1VijPqLk3baz_Kew3Twx_PeLluPKFK1RRvmCAju51GDZSdCwVWJS8SzW0d1VUVgDvICn9pJzFtQ-DJ5r3tcT5dNVoJHXIONonWjSXEJ9XB8oLySaNCxNP-Zd5dQLr1fSo4P4mwzGMTMKptCkZZOJB73CVtwE-7q6en2sbMwZBNBf_zcV0mHcaHK7tHMg5s3paGDfMcEiFsUKATVSkDQ5k-zZyrOj9U1AdqVEuplKmWOuQt4l7t4nn22is3e2428G_KcvkQuy-7e40oO6KuutxT08MnDRFRWHpsiVO1gqhoyMZEK6S3W_ayzoDfPjkLHfnw",
+                    "e": "AQAB"
+                }
+            ]
+        }"#;
+
+        // Configure JWKS with required issuer
+        let auth = JwksAuthenticator::from_json(jwks_json)
+            .expect("Should parse JWKS")
+            .with_issuer("expected-issuer");
+
+        // Create token with wrong issuer
+        use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+        let mut header = Header::new(Algorithm::RS256);
+        header.kid = Some("test-key-1".to_string());
+
+        let mut claims = valid_claims();
+        claims.iss = Some("wrong-issuer".to_string());
+        let token = encode(
+            &header,
+            &claims,
+            &EncodingKey::from_rsa_pem(RSA_PRIVATE_KEY.as_bytes()).unwrap(),
+        )
+        .unwrap();
+
+        let request = create_request_with_token(&token);
+        let result = auth.authenticate(&request).await;
+
+        assert!(
+            matches!(result, Err(AuthError::InvalidToken(_))),
+            "JWKS should reject token with wrong issuer"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_jwks_with_audience_validation() {
+        use mizuchi_uploadr::auth::jwks::JwksAuthenticator;
+
+        let jwks_json = r#"{
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "kid": "test-key-1",
+                    "use": "sig",
+                    "alg": "RS256",
+                    "n": "oqBt9v36h2YALYJ1505_1VijPqLk3baz_Kew3Twx_PeLluPKFK1RRvmCAju51GDZSdCwVWJS8SzW0d1VUVgDvICn9pJzFtQ-DJ5r3tcT5dNVoJHXIONonWjSXEJ9XB8oLySaNCxNP-Zd5dQLr1fSo4P4mwzGMTMKptCkZZOJB73CVtwE-7q6en2sbMwZBNBf_zcV0mHcaHK7tHMg5s3paGDfMcEiFsUKATVSkDQ5k-zZyrOj9U1AdqVEuplKmWOuQt4l7t4nn22is3e2428G_KcvkQuy-7e40oO6KuutxT08MnDRFRWHpsiVO1gqhoyMZEK6S3W_ayzoDfPjkLHfnw",
+                    "e": "AQAB"
+                }
+            ]
+        }"#;
+
+        // Configure JWKS with required audience
+        let auth = JwksAuthenticator::from_json(jwks_json)
+            .expect("Should parse JWKS")
+            .with_audience("expected-audience");
+
+        // Create token with wrong audience
+        use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+        let mut header = Header::new(Algorithm::RS256);
+        header.kid = Some("test-key-1".to_string());
+
+        let mut claims = valid_claims();
+        claims.aud = Some("wrong-audience".to_string());
+        let token = encode(
+            &header,
+            &claims,
+            &EncodingKey::from_rsa_pem(RSA_PRIVATE_KEY.as_bytes()).unwrap(),
+        )
+        .unwrap();
+
+        let request = create_request_with_token(&token);
+        let result = auth.authenticate(&request).await;
+
+        assert!(
+            matches!(result, Err(AuthError::InvalidToken(_))),
+            "JWKS should reject token with wrong audience"
+        );
+    }
 }

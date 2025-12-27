@@ -134,6 +134,22 @@ struct CachedJwks {
 /// JWKS-based JWT Authenticator
 ///
 /// Fetches keys from a JWKS endpoint and caches them.
+///
+/// # Example
+///
+/// ```no_run
+/// use mizuchi_uploadr::auth::jwks::JwksAuthenticator;
+/// use std::time::Duration;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let auth = JwksAuthenticator::new("https://auth.example.com/.well-known/jwks.json")
+///     .await?
+///     .with_cache_ttl(Duration::from_secs(3600))
+///     .with_issuer("https://auth.example.com")
+///     .with_audience("my-api");
+/// # Ok(())
+/// # }
+/// ```
 pub struct JwksAuthenticator {
     /// JWKS endpoint URL (if fetching remotely)
     endpoint: Option<String>,
@@ -146,6 +162,12 @@ pub struct JwksAuthenticator {
 
     /// HTTP client for fetching keys
     client: reqwest::Client,
+
+    /// Required issuer (if set, tokens must have this issuer)
+    required_issuer: Option<String>,
+
+    /// Required audience (if set, tokens must have this audience)
+    required_audience: Option<String>,
 }
 
 impl JwksAuthenticator {
@@ -162,6 +184,8 @@ impl JwksAuthenticator {
             })),
             cache_ttl: Duration::from_secs(3600), // Default: 1 hour
             client,
+            required_issuer: None,
+            required_audience: None,
         })
     }
 
@@ -178,6 +202,8 @@ impl JwksAuthenticator {
             })),
             cache_ttl: Duration::from_secs(3600),
             client: reqwest::Client::new(),
+            required_issuer: None,
+            required_audience: None,
         })
     }
 
@@ -191,6 +217,24 @@ impl JwksAuthenticator {
     /// Get the cache TTL
     pub fn cache_ttl(&self) -> Duration {
         self.cache_ttl
+    }
+
+    /// Set the required issuer (`iss` claim)
+    ///
+    /// Tokens without this issuer will be rejected.
+    #[must_use]
+    pub fn with_issuer(mut self, issuer: &str) -> Self {
+        self.required_issuer = Some(issuer.to_string());
+        self
+    }
+
+    /// Set the required audience (`aud` claim)
+    ///
+    /// Tokens without this audience will be rejected.
+    #[must_use]
+    pub fn with_audience(mut self, audience: &str) -> Self {
+        self.required_audience = Some(audience.to_string());
+        self
     }
 
     /// Check if the authenticator has any keys
@@ -322,7 +366,19 @@ impl Authenticator for JwksAuthenticator {
         // Create validation
         let mut validation = Validation::new(algorithm);
         validation.validate_exp = true;
-        validation.validate_aud = false; // Don't validate aud unless explicitly configured
+
+        // Configure issuer validation if set
+        if let Some(issuer) = &self.required_issuer {
+            validation.set_issuer(&[issuer]);
+        }
+
+        // Configure audience validation if set
+        if let Some(audience) = &self.required_audience {
+            validation.set_audience(&[audience]);
+            validation.validate_aud = true;
+        } else {
+            validation.validate_aud = false;
+        }
 
         // Decode and validate token
         let token_data = decode::<super::jwt::Claims>(&token, &decoding_key, &validation)
