@@ -93,11 +93,22 @@ struct CheckRequest {
     authorization_model_id: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct TupleKey {
     user: String,
     relation: String,
     object: String,
+}
+
+impl TupleKey {
+    /// Create a tuple key from an authorization request
+    fn from_request(request: &AuthzRequest) -> Self {
+        Self {
+            user: format!("user:{}", request.subject),
+            relation: OpenFgaAuthorizer::action_to_relation(&request.action).to_string(),
+            object: format!("bucket:{}", request.resource),
+        }
+    }
 }
 
 /// OpenFGA check response
@@ -283,8 +294,19 @@ impl OpenFgaAuthorizer {
 
     /// Perform a batch check for multiple authorization requests
     ///
-    /// This is more efficient than making individual requests when you need
-    /// to check multiple authorizations at once.
+    /// This is more efficient than making individual `authorize()` calls when you need
+    /// to check multiple authorizations at once, reducing network round-trips.
+    ///
+    /// # Arguments
+    /// * `requests` - Slice of authorization requests to check
+    ///
+    /// # Returns
+    /// A vector of booleans in the same order as the input requests,
+    /// where `true` indicates the authorization is allowed.
+    ///
+    /// # Note
+    /// Batch checks are NOT cached. Use individual `authorize()` calls if you
+    /// need caching for frequently repeated checks.
     pub async fn batch_check(&self, requests: &[AuthzRequest]) -> Result<Vec<bool>, AuthzError> {
         let url = format!(
             "{}/stores/{}/batch-check",
@@ -294,11 +316,7 @@ impl OpenFgaAuthorizer {
         let checks: Vec<BatchCheckItem> = requests
             .iter()
             .map(|r| BatchCheckItem {
-                tuple_key: TupleKey {
-                    user: format!("user:{}", r.subject),
-                    relation: Self::action_to_relation(&r.action).to_string(),
-                    object: format!("bucket:{}", r.resource),
-                },
+                tuple_key: TupleKey::from_request(r),
             })
             .collect();
 
@@ -359,11 +377,7 @@ impl Authorizer for OpenFgaAuthorizer {
         let url = format!("{}/stores/{}/check", self.config.url, self.config.store_id);
 
         let check_request = CheckRequest {
-            tuple_key: TupleKey {
-                user: format!("user:{}", request.subject),
-                relation: Self::action_to_relation(&request.action).to_string(),
-                object: format!("bucket:{}", request.resource),
-            },
+            tuple_key: TupleKey::from_request(request),
             authorization_model_id: self.config.authorization_model_id.clone(),
         };
 
