@@ -15,7 +15,7 @@ mod tests {
             address: "127.0.0.1:0".to_string(), // Use port 0 for random available port
         };
 
-        let server = MetricsServer::new(config);
+        let mut server = MetricsServer::new(config);
         let addr = server.start().await.expect("Server should start");
 
         // Server should be listening
@@ -40,7 +40,7 @@ mod tests {
             address: "127.0.0.1:0".to_string(),
         };
 
-        let server = MetricsServer::new(config);
+        let mut server = MetricsServer::new(config);
         let addr = server.start().await.expect("Server should start");
 
         let client = reqwest::Client::new();
@@ -82,7 +82,7 @@ mod tests {
             address: "127.0.0.1:0".to_string(),
         };
 
-        let server = MetricsServer::new(config);
+        let mut server = MetricsServer::new(config);
         let addr = server.start().await.expect("Server should start");
 
         // Record some metrics
@@ -122,7 +122,7 @@ mod tests {
             address: "127.0.0.1:0".to_string(),
         };
 
-        let server = MetricsServer::new(config);
+        let mut server = MetricsServer::new(config);
         let addr = server.start().await.expect("Server should start");
 
         // Record auth metrics
@@ -156,7 +156,7 @@ mod tests {
             address: "127.0.0.1:0".to_string(),
         };
 
-        let server = MetricsServer::new(config);
+        let mut server = MetricsServer::new(config);
         let addr = server.start().await.expect("Server should start");
 
         // Record error metrics
@@ -189,7 +189,7 @@ mod tests {
             address: "127.0.0.1:0".to_string(),
         };
 
-        let server = MetricsServer::new(config);
+        let mut server = MetricsServer::new(config);
         let addr = server.start().await.expect("Server should start");
 
         let client = reqwest::Client::new();
@@ -215,7 +215,7 @@ mod tests {
             address: "127.0.0.1:0".to_string(),
         };
 
-        let server = MetricsServer::new(config);
+        let mut server = MetricsServer::new(config);
         let addr = server.start().await.expect("Server should start");
 
         let client = reqwest::Client::new();
@@ -234,7 +234,7 @@ mod tests {
     async fn test_builder_pattern() {
         use mizuchi_uploadr::metrics::server::MetricsServer;
 
-        let server = MetricsServer::builder()
+        let mut server = MetricsServer::builder()
             .address("127.0.0.1:0")
             .build()
             .expect("Should build server");
