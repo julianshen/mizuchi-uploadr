@@ -39,6 +39,9 @@ use tokio::sync::RwLock;
 /// Default timeout for OPA requests (5 seconds)
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Maximum cache size to prevent unbounded memory growth
+const MAX_CACHE_SIZE: usize = 10_000;
+
 /// OPA client configuration
 #[derive(Debug, Clone)]
 pub struct OpaConfig {
@@ -199,6 +202,27 @@ impl OpaAuthorizer {
     async fn store_cache(&self, key: String, allowed: bool) {
         if self.config.cache_ttl.is_some() {
             let mut cache = self.cache.write().await;
+
+            // Evict expired entries if cache is getting large
+            if cache.len() >= MAX_CACHE_SIZE {
+                let cache_ttl = self.config.cache_ttl.unwrap();
+                cache.retain(|_, v| v.cached_at.elapsed() < cache_ttl);
+            }
+
+            // If still too large after cleanup, remove oldest entries
+            if cache.len() >= MAX_CACHE_SIZE {
+                // Find and remove oldest 10% of entries
+                let to_remove = MAX_CACHE_SIZE / 10;
+                let mut entries: Vec<_> = cache
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.cached_at))
+                    .collect();
+                entries.sort_by_key(|(_, t)| *t);
+                for (key, _) in entries.into_iter().take(to_remove) {
+                    cache.remove(&key);
+                }
+            }
+
             cache.insert(
                 key,
                 CachedDecision {
@@ -207,6 +231,18 @@ impl OpaAuthorizer {
                 },
             );
         }
+    }
+
+    /// Clear all cached authorization decisions
+    pub async fn clear_cache(&self) {
+        let mut cache = self.cache.write().await;
+        cache.clear();
+    }
+
+    /// Get the current cache size
+    pub async fn cache_size(&self) -> usize {
+        let cache = self.cache.read().await;
+        cache.len()
     }
 }
 
