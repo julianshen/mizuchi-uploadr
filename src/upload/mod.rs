@@ -7,6 +7,7 @@ use thiserror::Error;
 
 pub mod multipart;
 pub mod put_object;
+pub mod temp_file;
 pub mod zero_copy;
 
 /// Upload errors
