@@ -111,19 +111,56 @@ impl SigV4AuthHeader {
 ///
 /// Validates AWS Signature Version 4 signed requests.
 pub struct SigV4Authenticator {
-    service: String,
-    region: String,
+    /// Expected service name (e.g., "s3"). If set, requests must use this service in credential scope.
+    expected_service: Option<String>,
+    /// Expected region (e.g., "us-east-1"). If set, requests must use this region in credential scope.
+    expected_region: Option<String>,
+    /// Mapping of access key ID to secret access key
     credentials_store: HashMap<String, String>,
 }
 
 impl SigV4Authenticator {
-    /// Create a new SigV4 authenticator
+    /// Create a new SigV4 authenticator with expected service and region validation
+    ///
+    /// Requests must include matching service and region in their credential scope.
     pub fn new(service: &str, region: &str) -> Self {
         Self {
-            service: service.to_string(),
-            region: region.to_string(),
+            expected_service: Some(service.to_string()),
+            expected_region: Some(region.to_string()),
             credentials_store: HashMap::new(),
         }
+    }
+
+    /// Create a SigV4 authenticator that accepts any service/region
+    ///
+    /// Use this when you want to validate signatures without restricting scope.
+    pub fn permissive() -> Self {
+        Self {
+            expected_service: None,
+            expected_region: None,
+            credentials_store: HashMap::new(),
+        }
+    }
+
+    /// Validate that the request's credential scope matches expected values
+    fn validate_scope(&self, parsed: &SigV4AuthHeader) -> Result<(), AuthError> {
+        if let Some(expected) = &self.expected_service {
+            if &parsed.service != expected {
+                return Err(AuthError::InvalidToken(format!(
+                    "Invalid service: expected '{}', got '{}'",
+                    expected, parsed.service
+                )));
+            }
+        }
+        if let Some(expected) = &self.expected_region {
+            if &parsed.region != expected {
+                return Err(AuthError::InvalidToken(format!(
+                    "Invalid region: expected '{}', got '{}'",
+                    expected, parsed.region
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Add credentials for an access key
@@ -268,7 +305,10 @@ impl Authenticator for SigV4Authenticator {
 
         let parsed = SigV4AuthHeader::parse(auth_header)?;
 
-        // Step 2: Validate timestamp
+        // Step 2: Validate credential scope (service/region)
+        self.validate_scope(&parsed)?;
+
+        // Step 3: Validate timestamp
         let timestamp = request
             .headers
             .get("x-amz-date")
@@ -276,7 +316,7 @@ impl Authenticator for SigV4Authenticator {
 
         Self::validate_timestamp(timestamp)?;
 
-        // Step 3: Look up secret key
+        // Step 4: Look up secret key
         let secret_key = self
             .credentials_store
             .get(&parsed.access_key)
@@ -284,19 +324,19 @@ impl Authenticator for SigV4Authenticator {
                 AuthError::InvalidToken(format!("Unknown access key: {}", parsed.access_key))
             })?;
 
-        // Step 4: Build canonical request
+        // Step 5: Build canonical request
         let canonical_request =
             Self::build_canonical_request(request, &parsed.signed_headers)?;
         let canonical_request_hash = Self::sha256_hex(canonical_request.as_bytes());
 
-        // Step 5: Build string to sign
+        // Step 6: Build string to sign
         let string_to_sign = Self::build_string_to_sign(
             timestamp,
             &parsed.credential_scope(),
             &canonical_request_hash,
         );
 
-        // Step 6: Derive signing key and compute signature
+        // Step 7: Derive signing key and compute signature
         let signing_key = Self::derive_signing_key(
             secret_key,
             &parsed.date,
@@ -305,7 +345,7 @@ impl Authenticator for SigV4Authenticator {
         );
         let computed_signature = hex::encode(Self::hmac_sha256(&signing_key, string_to_sign.as_bytes()));
 
-        // Step 7: Compare signatures (constant-time)
+        // Step 8: Compare signatures (constant-time)
         if !Self::constant_time_compare(&computed_signature, &parsed.signature) {
             return Err(AuthError::InvalidSignature);
         }
@@ -330,8 +370,15 @@ mod tests {
     #[test]
     fn test_sigv4_authenticator_creation() {
         let auth = SigV4Authenticator::new("s3", "us-east-1");
-        assert_eq!(auth.service, "s3");
-        assert_eq!(auth.region, "us-east-1");
+        assert_eq!(auth.expected_service, Some("s3".to_string()));
+        assert_eq!(auth.expected_region, Some("us-east-1".to_string()));
+    }
+
+    #[test]
+    fn test_permissive_authenticator() {
+        let auth = SigV4Authenticator::permissive();
+        assert!(auth.expected_service.is_none());
+        assert!(auth.expected_region.is_none());
     }
 
     #[tokio::test]
