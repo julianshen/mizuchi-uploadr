@@ -189,11 +189,10 @@ mod tests {
     // TEST: S3Client Integration
     // ========================================================================
 
-    /// Test S3Client.put_object_from_file() method exists
+    /// Test S3Client.put_object_from_file() method exists and compiles
     ///
-    /// RED: Ignored until put_object_from_file() is implemented in PR #46
+    /// GREEN: Method now exists, test verifies it compiles and can be called
     #[tokio::test]
-    #[ignore = "Requires put_object_from_file() - will be implemented in PR #46"]
     async fn test_s3_client_has_put_object_from_file() {
         use mizuchi_uploadr::s3::{S3Client, S3ClientConfig};
         use mizuchi_uploadr::upload::temp_file::TempFileUpload;
@@ -208,16 +207,19 @@ mod tests {
             timeout: None,
         };
 
-        let _client = S3Client::new(config).expect("Should create client");
+        let client = S3Client::new(config).expect("Should create client");
 
-        let data = Bytes::from("test data");
-        let _temp = TempFileUpload::from_bytes(data).expect("Should create temp file");
+        let data = Bytes::from("test data for put_object_from_file");
+        let temp = TempFileUpload::from_bytes(data).expect("Should create temp file");
 
-        // TODO: Uncomment when put_object_from_file is implemented
-        // let _result = client
-        //     .put_object_from_file("test-key", &temp, Some("text/plain"))
-        //     .await;
-        todo!("Implement put_object_from_file in S3Client")
+        // Verify the method exists and can be called
+        // Will fail with network error since MinIO isn't running
+        let result = client
+            .put_object_from_file("test-key", &temp, Some("text/plain"))
+            .await;
+
+        // Expect a network/connection error (not a compile error)
+        assert!(result.is_err(), "Should fail without MinIO running");
     }
 
     // ========================================================================
