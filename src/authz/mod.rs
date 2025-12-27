@@ -26,6 +26,9 @@ pub enum AuthzError {
 
     #[error("Backend error: {0}")]
     BackendError(String),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
 }
 
 /// Authorization request
