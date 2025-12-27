@@ -926,6 +926,226 @@ impl S3Client {
 
         Ok(())
     }
+
+    /// Upload an object from a temp file (zero-copy optimized)
+    ///
+    /// Uses the pre-computed content hash from TempFileUpload for SigV4 signing,
+    /// avoiding the need to re-hash the body. On Linux with tmpfs, this provides
+    /// near-zero-copy performance since the file is already in RAM.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - S3 object key
+    /// * `temp_file` - TempFileUpload with pre-computed hash
+    /// * `content_type` - Optional content type
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(S3PutObjectResponse)` - Contains ETag of uploaded object
+    /// * `Err(S3ClientError)` - If upload fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use mizuchi_uploadr::s3::{S3Client, S3ClientConfig};
+    /// use mizuchi_uploadr::upload::temp_file::TempFileUpload;
+    /// use bytes::Bytes;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let config = S3ClientConfig {
+    /// #     bucket: "test".into(),
+    /// #     region: "us-east-1".into(),
+    /// #     endpoint: None,
+    /// #     access_key: None,
+    /// #     secret_key: None,
+    /// #     retry: None,
+    /// #     timeout: None,
+    /// # };
+    /// let client = S3Client::new(config)?;
+    ///
+    /// // Create temp file with pre-computed hash
+    /// let data = Bytes::from(vec![0u8; 10 * 1024 * 1024]); // 10MB
+    /// let temp = TempFileUpload::from_bytes(data)?;
+    ///
+    /// // Upload using pre-computed hash (no re-hashing needed)
+    /// let response = client.put_object_from_file("large-file.bin", &temp, None).await?;
+    /// println!("ETag: {}", response.etag);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[tracing::instrument(
+        name = "s3.put_object_from_file",
+        skip(self, temp_file),
+        fields(
+            s3.bucket = %self.config.bucket,
+            s3.key = %key,
+            http.method = "PUT",
+            upload.bytes = temp_file.size(),
+            upload.mode = "temp_file",
+            s3.etag = tracing::field::Empty,
+            http.status_code = tracing::field::Empty
+        ),
+        err
+    )]
+    pub async fn put_object_from_file(
+        &self,
+        key: &str,
+        temp_file: &crate::upload::temp_file::TempFileUpload,
+        content_type: Option<&str>,
+    ) -> Result<S3PutObjectResponse, S3ClientError> {
+        use std::io::Read;
+
+        // Read file content into memory
+        // Note: For large files, this could be optimized with streaming
+        // In REFACTOR phase, we can use reqwest's Body::wrap_stream
+        let mut file = std::fs::File::open(temp_file.path())
+            .map_err(|e| S3ClientError::RequestError(format!("Failed to open temp file: {}", e)))?;
+
+        let mut body = Vec::with_capacity(temp_file.size() as usize);
+        file.read_to_end(&mut body)
+            .map_err(|e| S3ClientError::RequestError(format!("Failed to read temp file: {}", e)))?;
+
+        let body = Bytes::from(body);
+
+        // Use pre-computed content hash (avoids re-hashing)
+        let content_hash = temp_file.content_hash().to_string();
+
+        // Record zero-copy mode in metrics
+        crate::metrics::record_data_transfer(temp_file.size(), 0.0, temp_file.supports_zero_copy());
+
+        // Build the request URL
+        let url = format!("{}/{}", self.endpoint(), key);
+
+        // Build headers list for signing (including pre-computed content hash)
+        let mut headers = vec![
+            ("host".to_string(), self.get_host()),
+            ("x-amz-content-sha256".to_string(), content_hash.clone()),
+        ];
+        if let Some(ct) = content_type {
+            headers.push(("content-type".to_string(), ct.to_string()));
+        }
+
+        // Sign the request if credentials are available
+        let signed_headers = if self.has_credentials() {
+            self.sign_request("PUT", &url, &headers, &body)?
+        } else {
+            vec![]
+        };
+
+        // Retry loop with exponential backoff
+        let mut last_error = None;
+        for attempt in 0..=self.retry_config.max_retries {
+            if attempt > 0 {
+                let backoff = self.calculate_backoff(attempt - 1);
+                tracing::debug!(
+                    attempt = attempt,
+                    backoff_ms = backoff.as_millis(),
+                    "Retrying S3 PutObject from file after backoff"
+                );
+                tokio::time::sleep(backoff).await;
+            }
+
+            // Build the HTTP request
+            let mut request = self.http_client.put(&url).body(body.clone());
+
+            // Add Content-Type header if provided
+            if let Some(ct) = content_type {
+                request = request.header("Content-Type", ct);
+            }
+
+            // Add x-amz-content-sha256 header (pre-computed)
+            request = request.header("x-amz-content-sha256", &content_hash);
+
+            // Add signed headers
+            for (name, value) in &signed_headers {
+                request = request.header(name, value);
+            }
+
+            // Inject W3C Trace Context
+            request = self.inject_trace_context(request);
+
+            // Send the request
+            let result = request.send().await;
+
+            match result {
+                Ok(response) => {
+                    let status = response.status();
+
+                    if status.is_success() {
+                        let etag = response
+                            .headers()
+                            .get("ETag")
+                            .and_then(|v| v.to_str().ok())
+                            .ok_or_else(|| {
+                                S3ClientError::ResponseError("Missing ETag header".to_string())
+                            })?
+                            .to_string();
+
+                        // Record response attributes in span
+                        let span = tracing::Span::current();
+                        span.record("s3.etag", etag.as_str());
+                        span.record("http.status_code", status.as_u16());
+
+                        tracing::info!(
+                            etag = %etag,
+                            status = status.as_u16(),
+                            attempts = attempt + 1,
+                            mode = "temp_file",
+                            "PutObject from file completed"
+                        );
+
+                        return Ok(S3PutObjectResponse { etag });
+                    }
+
+                    // Check if error is retryable
+                    if Self::is_retryable_error(status) && attempt < self.retry_config.max_retries {
+                        let error_body = response
+                            .text()
+                            .await
+                            .unwrap_or_else(|_| "Unknown error".to_string());
+                        tracing::warn!(
+                            status = status.as_u16(),
+                            attempt = attempt + 1,
+                            error = %error_body,
+                            "Retryable S3 error, will retry"
+                        );
+                        last_error = Some(S3ClientError::ResponseError(format!(
+                            "HTTP {}: {}",
+                            status.as_u16(),
+                            error_body
+                        )));
+                        continue;
+                    }
+
+                    // Non-retryable error
+                    let error_body = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    return Err(S3ClientError::ResponseError(format!(
+                        "HTTP {}: {}",
+                        status.as_u16(),
+                        error_body
+                    )));
+                }
+                Err(e) => {
+                    if attempt < self.retry_config.max_retries {
+                        tracing::warn!(
+                            attempt = attempt + 1,
+                            error = %e,
+                            "Network error, will retry"
+                        );
+                        last_error = Some(S3ClientError::RequestError(e.to_string()));
+                        continue;
+                    }
+                    return Err(S3ClientError::RequestError(e.to_string()));
+                }
+            }
+        }
+
+        Err(last_error
+            .unwrap_or_else(|| S3ClientError::RequestError("All retries exhausted".to_string())))
+    }
 }
 
 /// S3 PutObject response
