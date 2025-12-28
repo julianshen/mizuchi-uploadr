@@ -50,6 +50,7 @@ impl JwtAuthenticator {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
         validation.validate_aud = false; // Only validate aud when explicitly set
+        validation.leeway = 0; // Strict expiration checking (no clock skew tolerance)
 
         Self {
             decoding_key,
@@ -64,6 +65,7 @@ impl JwtAuthenticator {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.validate_exp = true;
         validation.validate_aud = false; // Only validate aud when explicitly set
+        validation.leeway = 0; // Strict expiration checking (no clock skew tolerance)
 
         Ok(Self {
             decoding_key,
@@ -80,6 +82,7 @@ impl JwtAuthenticator {
         let mut validation = Validation::new(Algorithm::ES256);
         validation.validate_exp = true;
         validation.validate_aud = false; // Only validate aud when explicitly set
+        validation.leeway = 0; // Strict expiration checking (no clock skew tolerance)
 
         Ok(Self {
             decoding_key,

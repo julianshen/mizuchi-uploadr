@@ -50,11 +50,7 @@ async fn test_upload_with_valid_jwt_succeeds() {
 }
 
 /// Test: Upload with expired JWT token fails with 401
-///
-/// RED Phase: This test documents expected behavior when auth is enforced.
-/// Currently ignored because the server stub doesn't enforce JWT validation.
 #[tokio::test]
-#[ignore = "Server auth enforcement not yet implemented - RED phase test"]
 async fn test_upload_with_expired_jwt_returns_401() {
     if !super::common::is_s3_backend_available().await {
         eprintln!("Skipping: S3 backend not available");
@@ -83,10 +79,7 @@ async fn test_upload_with_expired_jwt_returns_401() {
 }
 
 /// Test: Upload with invalid JWT signature fails with 401
-///
-/// RED Phase: This test documents expected behavior when auth is enforced.
 #[tokio::test]
-#[ignore = "Server auth enforcement not yet implemented - RED phase test"]
 async fn test_upload_with_invalid_jwt_signature_returns_401() {
     if !super::common::is_s3_backend_available().await {
         eprintln!("Skipping: S3 backend not available");
@@ -117,10 +110,7 @@ async fn test_upload_with_invalid_jwt_signature_returns_401() {
 }
 
 /// Test: Upload with malformed JWT fails with 401
-///
-/// RED Phase: This test documents expected behavior when auth is enforced.
 #[tokio::test]
-#[ignore = "Server auth enforcement not yet implemented - RED phase test"]
 async fn test_upload_with_malformed_jwt_returns_401() {
     if !super::common::is_s3_backend_available().await {
         eprintln!("Skipping: S3 backend not available");
@@ -149,10 +139,7 @@ async fn test_upload_with_malformed_jwt_returns_401() {
 }
 
 /// Test: Upload without JWT when required fails with 401
-///
-/// RED Phase: This test documents expected behavior when auth is enforced.
 #[tokio::test]
-#[ignore = "Server auth enforcement not yet implemented - RED phase test"]
 async fn test_upload_without_jwt_when_required_returns_401() {
     if !super::common::is_s3_backend_available().await {
         eprintln!("Skipping: S3 backend not available");
@@ -179,10 +166,7 @@ async fn test_upload_without_jwt_when_required_returns_401() {
 }
 
 /// Test: Upload with wrong Authorization scheme fails with 401
-///
-/// RED Phase: This test documents expected behavior when auth is enforced.
 #[tokio::test]
-#[ignore = "Server auth enforcement not yet implemented - RED phase test"]
 async fn test_upload_with_wrong_auth_scheme_returns_401() {
     if !super::common::is_s3_backend_available().await {
         eprintln!("Skipping: S3 backend not available");
@@ -333,9 +317,9 @@ async fn test_different_users_can_upload() {
 
 /// Test: Token that expires during upload is handled gracefully
 ///
-/// RED Phase: This test documents expected behavior when auth is enforced.
+/// Note: This test uses a 2-second token and 3-second wait to ensure
+/// reliable expiration detection across different system loads.
 #[tokio::test]
-#[ignore = "Server auth enforcement not yet implemented - RED phase test"]
 async fn test_token_expiry_during_upload() {
     if !super::common::is_s3_backend_available().await {
         eprintln!("Skipping: S3 backend not available");
@@ -347,8 +331,8 @@ async fn test_token_expiry_during_upload() {
         .await
         .expect("Failed to create test env");
 
-    // Token that expires in 1 second
-    let token = E2ETestEnv::generate_test_jwt("short-lived-user", 1);
+    // Token that expires in 2 seconds (allows time for first upload)
+    let token = E2ETestEnv::generate_test_jwt("short-lived-user", 2);
 
     // First upload should succeed
     let response = env
@@ -361,8 +345,8 @@ async fn test_token_expiry_during_upload() {
         "First upload should succeed before expiry"
     );
 
-    // Wait for token to expire
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // Wait for token to expire (3 seconds to ensure expiration)
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
     // Second upload should fail
     let response = env

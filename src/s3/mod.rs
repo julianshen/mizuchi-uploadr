@@ -487,8 +487,8 @@ impl S3Client {
         body: Bytes,
         content_type: Option<&str>,
     ) -> Result<S3PutObjectResponse, S3ClientError> {
-        // Build the request URL
-        let url = format!("{}/{}", self.endpoint(), key);
+        // Build the request URL (path-style: /bucket/key)
+        let url = format!("{}/{}/{}", self.endpoint(), self.config.bucket, key);
 
         // Compute content hash for x-amz-content-sha256
         let content_hash = Self::compute_content_hash(&body);
@@ -644,8 +644,8 @@ impl S3Client {
         &self,
         key: &str,
     ) -> Result<S3CreateMultipartUploadResponse, S3ClientError> {
-        // Build the request URL with ?uploads query parameter
-        let url = format!("{}/{}?uploads", self.endpoint(), key);
+        // Build the request URL with ?uploads query parameter (path-style: /bucket/key?uploads)
+        let url = format!("{}/{}/{}?uploads", self.endpoint(), self.config.bucket, key);
 
         // Build POST request with trace context
         let request = self.http_client.post(&url);
@@ -720,10 +720,11 @@ impl S3Client {
         part_number: u32,
         body: Bytes,
     ) -> Result<S3UploadPartResponse, S3ClientError> {
-        // Build the request URL with query parameters
+        // Build the request URL with query parameters (path-style: /bucket/key?...)
         let url = format!(
-            "{}/{}?partNumber={}&uploadId={}",
+            "{}/{}/{}?partNumber={}&uploadId={}",
             self.endpoint(),
+            self.config.bucket,
             key,
             part_number,
             upload_id
@@ -798,8 +799,14 @@ impl S3Client {
         upload_id: &str,
         parts: Vec<S3CompletedPart>,
     ) -> Result<S3CompleteMultipartUploadResponse, S3ClientError> {
-        // Build the request URL with uploadId query parameter
-        let url = format!("{}/{}?uploadId={}", self.endpoint(), key, upload_id);
+        // Build the request URL with uploadId query parameter (path-style: /bucket/key?...)
+        let url = format!(
+            "{}/{}/{}?uploadId={}",
+            self.endpoint(),
+            self.config.bucket,
+            key,
+            upload_id
+        );
 
         // Build XML body for CompleteMultipartUpload
         let mut xml_parts = String::new();
@@ -886,8 +893,14 @@ impl S3Client {
         key: &str,
         upload_id: &str,
     ) -> Result<(), S3ClientError> {
-        // Build the request URL with uploadId query parameter
-        let url = format!("{}/{}?uploadId={}", self.endpoint(), key, upload_id);
+        // Build the request URL with uploadId query parameter (path-style: /bucket/key?...)
+        let url = format!(
+            "{}/{}/{}?uploadId={}",
+            self.endpoint(),
+            self.config.bucket,
+            key,
+            upload_id
+        );
 
         // Build DELETE request with trace context
         let request = self.http_client.delete(&url);
@@ -1013,8 +1026,8 @@ impl S3Client {
         // Record zero-copy mode in metrics
         crate::metrics::record_data_transfer(temp_file.size(), 0.0, temp_file.supports_zero_copy());
 
-        // Build the request URL
-        let url = format!("{}/{}", self.endpoint(), key);
+        // Build the request URL (path-style: /bucket/key)
+        let url = format!("{}/{}/{}", self.endpoint(), self.config.bucket, key);
 
         // Build headers list for signing (including pre-computed content hash)
         let mut headers = vec![

@@ -46,17 +46,22 @@
 //! ```
 //!
 
-use crate::config::Config;
+use crate::auth::jwt::JwtAuthenticator;
+use crate::auth::{AuthError, AuthRequest, Authenticator};
+use crate::config::{BucketConfig, Config};
+use crate::s3::{S3Client, S3ClientConfig};
 use crate::server::ServerError;
+use bytes::Bytes;
 use http_body_util::BodyExt;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// HTTP Server for Mizuchi Uploadr
 ///
@@ -219,6 +224,31 @@ impl PingoraServer {
     }
 }
 
+/// Find a bucket configuration that matches the request path
+fn find_bucket_for_path<'a>(config: &'a Config, path: &str) -> Option<&'a BucketConfig> {
+    config
+        .buckets
+        .iter()
+        .find(|bucket| path.starts_with(&bucket.path_prefix))
+}
+
+/// Build AuthRequest from hyper Request headers
+fn build_auth_request(req: &Request<Incoming>) -> AuthRequest {
+    let mut headers = HashMap::new();
+    for (name, value) in req.headers() {
+        if let Ok(v) = value.to_str() {
+            headers.insert(name.to_string().to_lowercase(), v.to_string());
+        }
+    }
+
+    AuthRequest {
+        headers,
+        query: req.uri().query().map(|q| q.to_string()),
+        method: req.method().to_string(),
+        path: req.uri().path().to_string(),
+    }
+}
+
 /// Handle HTTP request
 ///
 /// Routes incoming requests to appropriate handlers based on path and method.
@@ -226,20 +256,25 @@ impl PingoraServer {
 /// # Supported Endpoints
 ///
 /// * `GET /health` - Health check endpoint (returns "ok")
-/// * `PUT /uploads/*` - Upload endpoint (placeholder for actual upload logic)
+/// * `PUT /{path_prefix}/*` - Upload endpoint (forwards to S3 backend)
 /// * All other requests return 404 Not Found
+///
+/// # Authentication
+///
+/// If a bucket has `auth.enabled = true` and JWT config, the request must include
+/// a valid JWT token in the `Authorization: Bearer <token>` header.
 ///
 /// # Arguments
 ///
 /// * `req` - The incoming HTTP request
-/// * `_config` - Server configuration (currently unused, reserved for future use)
+/// * `config` - Server configuration with bucket definitions
 ///
 /// # Returns
 ///
 /// An HTTP response with appropriate status code and body
 async fn handle_request(
     req: Request<Incoming>,
-    _config: Arc<Config>,
+    config: Arc<Config>,
 ) -> Result<Response<String>, hyper::Error> {
     let path = req.uri().path().to_string();
     let method = req.method().clone();
@@ -255,21 +290,98 @@ async fn handle_request(
             .expect("Failed to build health check response"));
     }
 
-    // Handle upload requests (PUT to /uploads/*)
-    if path.starts_with("/uploads/") && method == hyper::Method::PUT {
-        let path_clone = path.clone();
-        // Consume the request body to avoid connection reset errors
-        // This is important for large uploads where the body is still being transmitted
+    // Find matching bucket for the path
+    let bucket = match find_bucket_for_path(&config, &path) {
+        Some(b) => b,
+        None => {
+            info!("No bucket configured for path: {}", path);
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header("Content-Type", "text/plain")
+                .body("Not Found".to_string())
+                .expect("Failed to build 404 response"));
+        }
+    };
+
+    // Handle upload requests (PUT)
+    if method == hyper::Method::PUT {
+        // Authenticate if auth is enabled for this bucket
+        if bucket.auth.enabled {
+            if let Some(ref jwt_config) = bucket.auth.jwt {
+                // Create JWT authenticator from config
+                let secret = match &jwt_config.secret {
+                    Some(s) => s,
+                    None => {
+                        error!(
+                            "JWT auth enabled but no secret configured for bucket {}",
+                            bucket.name
+                        );
+                        return Ok(Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .header("Content-Type", "text/plain")
+                            .body("Server configuration error".to_string())
+                            .expect("Failed to build error response"));
+                    }
+                };
+
+                let authenticator = JwtAuthenticator::new_hs256(secret);
+                let auth_request = build_auth_request(&req);
+
+                match authenticator.authenticate(&auth_request).await {
+                    Ok(result) => {
+                        info!("Authenticated user: {}", result.subject);
+                    }
+                    Err(AuthError::MissingAuth) => {
+                        warn!("Missing authentication for {}", path);
+                        return Ok(Response::builder()
+                            .status(StatusCode::UNAUTHORIZED)
+                            .header("Content-Type", "text/plain")
+                            .header("WWW-Authenticate", "Bearer")
+                            .body("Missing authentication".to_string())
+                            .expect("Failed to build 401 response"));
+                    }
+                    Err(AuthError::TokenExpired) => {
+                        warn!("Expired token for {}", path);
+                        return Ok(Response::builder()
+                            .status(StatusCode::UNAUTHORIZED)
+                            .header("Content-Type", "text/plain")
+                            .header("WWW-Authenticate", "Bearer error=\"invalid_token\", error_description=\"Token expired\"")
+                            .body("Token expired".to_string())
+                            .expect("Failed to build 401 response"));
+                    }
+                    Err(AuthError::InvalidSignature) | Err(AuthError::InvalidToken(_)) => {
+                        warn!("Invalid token for {}", path);
+                        return Ok(Response::builder()
+                            .status(StatusCode::UNAUTHORIZED)
+                            .header("Content-Type", "text/plain")
+                            .header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
+                            .body("Invalid token".to_string())
+                            .expect("Failed to build 401 response"));
+                    }
+                    Err(e) => {
+                        error!("Authentication error: {}", e);
+                        return Ok(Response::builder()
+                            .status(StatusCode::UNAUTHORIZED)
+                            .header("Content-Type", "text/plain")
+                            .body(format!("Authentication failed: {}", e))
+                            .expect("Failed to build 401 response"));
+                    }
+                }
+            }
+        }
+
+        // Extract content type from request
+        let content_type = req
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        // Collect the request body
         let body = req.into_body();
         let bytes_result = body.collect().await;
-        match bytes_result {
-            Ok(collected) => {
-                let bytes_received = collected.to_bytes().len();
-                info!(
-                    "Upload request to {}: {} bytes received",
-                    path_clone, bytes_received
-                );
-            }
+        let body_bytes = match bytes_result {
+            Ok(collected) => collected.to_bytes(),
             Err(e) => {
                 error!("Failed to read upload body: {}", e);
                 return Ok(Response::builder()
@@ -278,12 +390,70 @@ async fn handle_request(
                     .body(format!("Failed to read body: {}", e))
                     .expect("Failed to build error response"));
             }
+        };
+
+        info!(
+            "Upload request to {}: {} bytes received",
+            path,
+            body_bytes.len()
+        );
+
+        // Create S3 client and upload
+        let s3_config = S3ClientConfig {
+            bucket: bucket.s3.bucket.clone(),
+            region: bucket.s3.region.clone(),
+            endpoint: bucket.s3.endpoint.clone(),
+            access_key: bucket.s3.access_key.clone(),
+            secret_key: bucket.s3.secret_key.clone(),
+            retry: None,
+            timeout: None,
+        };
+
+        let s3_client = match S3Client::new(s3_config) {
+            Ok(client) => client,
+            Err(e) => {
+                error!("Failed to create S3 client: {}", e);
+                return Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .header("Content-Type", "text/plain")
+                    .body("Failed to create S3 client".to_string())
+                    .expect("Failed to build error response"));
+            }
+        };
+
+        // Extract the S3 key from the path (remove the path prefix)
+        let s3_key = path
+            .strip_prefix(&bucket.path_prefix)
+            .unwrap_or(&path)
+            .trim_start_matches('/');
+
+        // Upload to S3
+        match s3_client
+            .put_object(
+                s3_key,
+                Bytes::from(body_bytes.to_vec()),
+                content_type.as_deref(),
+            )
+            .await
+        {
+            Ok(response) => {
+                info!("Upload successful, ETag: {}", response.etag);
+                return Ok(Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", "text/plain")
+                    .header("ETag", &response.etag)
+                    .body("Upload successful".to_string())
+                    .expect("Failed to build upload response"));
+            }
+            Err(e) => {
+                error!("S3 upload failed: {}", e);
+                return Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .header("Content-Type", "text/plain")
+                    .body(format!("Upload failed: {}", e))
+                    .expect("Failed to build error response"));
+            }
         }
-        return Ok(Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "text/plain")
-            .body("Upload successful".to_string())
-            .expect("Failed to build upload response"));
     }
 
     // Default: 404 Not Found

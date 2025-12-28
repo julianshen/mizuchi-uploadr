@@ -28,7 +28,7 @@ fn test_config(port: u16) -> Config {
             name: "test".into(),
             path_prefix: "/uploads".into(),
             s3: S3Config {
-                bucket: "test-bucket".into(),
+                bucket: "e2e-test-bucket".into(),
                 region: "us-east-1".into(),
                 endpoint: Some("http://localhost:9000".into()),
                 access_key: Some("minioadmin".into()),
