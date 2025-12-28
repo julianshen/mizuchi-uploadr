@@ -5,14 +5,15 @@ This folder contains everything you need to run a full-featured Mizuchi Uploadr 
 ## Quick Start
 
 ```bash
-# 1. Start the environment
+# 1. Start MinIO (S3-compatible storage)
 docker-compose up -d
 
 # 2. Generate a JWT token for authenticated uploads
 ./generate-jwt.sh
 
-# 3. Upload a file
-./uploader.py upload myfile.txt /uploads/myfile.txt
+# 3. Upload a file (directly to MinIO)
+pip install requests  # if not installed
+./uploader.py upload myfile.txt /uploads/myfile.txt --endpoint http://localhost:9000
 ```
 
 ## Components
@@ -24,18 +25,23 @@ The `docker-compose.yml` provides:
 | Service | Port | Description |
 |---------|------|-------------|
 | MinIO | 9000 (S3), 9001 (Console) | S3-compatible object storage |
-| Mizuchi | 8080 (API), 9090 (Metrics) | Upload proxy |
+| Mizuchi | 8080 (API), 9090 (Metrics) | Upload proxy (optional) |
 | Prometheus | 9091 (optional) | Metrics collection |
 | Grafana | 3000 (optional) | Metrics visualization |
 
-**Start core services:**
+**Start MinIO only (for testing uploader):**
 ```bash
 docker-compose up -d
 ```
 
+**Start full environment with Mizuchi proxy:**
+```bash
+docker-compose --profile full up -d
+```
+
 **Start with monitoring:**
 ```bash
-docker-compose --profile monitoring up -d
+docker-compose --profile full --profile monitoring up -d
 ```
 
 **View MinIO Console:**
@@ -113,27 +119,31 @@ pip install requests
 
 ## Example Workflows
 
-### 1. Public Upload (No Auth)
+### 1. Upload to MinIO (No Mizuchi Proxy)
 
 ```bash
-# Start services
+# Start MinIO
 docker-compose up -d
 
-# Upload to public bucket
-./uploader.py upload test.txt /uploads/test.txt
+# Upload to public bucket (MinIO on port 9000)
+./uploader.py upload test.txt /uploads/test.txt --endpoint http://localhost:9000
 ```
 
-### 2. Authenticated Upload
+### 2. Upload via Mizuchi Proxy
 
 ```bash
-# Generate token
-TOKEN=$(./generate-jwt.sh 2>/dev/null | tail -1)
+# Start full environment
+docker-compose --profile full up -d
 
-# Upload to private bucket
+# Upload to public bucket (Mizuchi on port 8080)
+./uploader.py upload test.txt /uploads/test.txt --endpoint http://localhost:8080
+
+# Authenticated upload to private bucket
+TOKEN=$(./generate-jwt.sh 2>/dev/null | tail -1)
 ./uploader.py upload secret.pdf /private/secret.pdf --token "$TOKEN"
 ```
 
-### 3. Large File Upload
+### 3. Large File Upload with Parallel Chunks
 
 ```bash
 # Create a test file (100MB)
@@ -141,6 +151,7 @@ dd if=/dev/zero of=largefile.bin bs=1M count=100
 
 # Upload with parallel chunks
 ./uploader.py upload largefile.bin /uploads/largefile.bin \
+    --endpoint http://localhost:9000 \
     --chunk-size 10M \
     --parallel 4 \
     --verbose
@@ -149,11 +160,11 @@ dd if=/dev/zero of=largefile.bin bs=1M count=100
 ### 4. Using curl
 
 ```bash
-# Simple upload
-curl -X PUT http://localhost:8080/uploads/test.txt \
+# Simple upload to MinIO
+curl -X PUT http://localhost:9000/uploads/test.txt \
     -d "Hello, World!"
 
-# Authenticated upload
+# Via Mizuchi proxy (if running with --profile full)
 TOKEN=$(./generate-jwt.sh 2>/dev/null | tail -1)
 curl -X PUT http://localhost:8080/private/test.txt \
     -H "Authorization: Bearer $TOKEN" \

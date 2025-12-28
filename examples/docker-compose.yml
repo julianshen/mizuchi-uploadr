@@ -1,10 +1,17 @@
 version: "3.8"
 
 # Mizuchi Uploadr Full-Feature Development Environment
-# Usage: docker-compose up -d
+#
+# Usage:
+#   MinIO only (testing): docker-compose up -d
+#   Full environment:     docker-compose --profile full up -d
+#   With monitoring:      docker-compose --profile full --profile monitoring up -d
+#
+# The default profile starts only MinIO, allowing you to test the uploader CLI
+# directly against the S3-compatible API without building the mizuchi server.
 
 services:
-  # MinIO - S3-compatible object storage
+  # MinIO - S3-compatible object storage (always starts)
   minio:
     image: minio/minio:latest
     container_name: mizuchi-minio
@@ -23,7 +30,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Create default bucket on startup
+  # Create default bucket on startup (always runs)
   minio-init:
     image: minio/mc:latest
     container_name: mizuchi-minio-init
@@ -41,9 +48,12 @@ services:
       "
 
   # Mizuchi Uploadr - S3 Upload Proxy
+  # Use profile "full" to include, or skip with --profile minio-only
   mizuchi:
     image: ghcr.io/julianshen/mizuchi-uploadr:latest
     container_name: mizuchi-uploadr
+    profiles:
+      - full            # Only start in full mode
     build:
       context: ..
       dockerfile: Dockerfile

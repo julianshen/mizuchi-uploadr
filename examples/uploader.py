@@ -205,22 +205,17 @@ class MizuchiUploader:
 
         try:
             with open(path, 'rb') as f:
-                # Wrap file for progress tracking
-                def file_reader():
-                    chunk_read_size = 8192
-                    while True:
-                        data = f.read(chunk_read_size)
-                        if not data:
-                            break
-                        progress.add(len(data))
-                        progress.display()
-                        yield data
+                # Read entire file for simple upload (fine for files < multipart threshold)
+                data = f.read()
 
-                response = self.session.put(
-                    url,
-                    data=file_reader(),
-                    headers={**self._get_headers(), 'Content-Length': str(file_size)},
-                )
+            progress.add(file_size)
+            progress.display()
+
+            response = self.session.put(
+                url,
+                data=data,
+                headers={**self._get_headers(), 'Content-Length': str(file_size)},
+            )
 
             print()  # New line after progress bar
 
