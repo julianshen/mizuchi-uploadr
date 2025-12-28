@@ -5,18 +5,20 @@
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/julianshen/mizuchi-uploadr/actions/workflows/ci.yml/badge.svg)](https://github.com/julianshen/mizuchi-uploadr/actions)
+[![Tests](https://img.shields.io/badge/tests-75%20unit%20%7C%2044%20E2E-brightgreen.svg)](https://github.com/julianshen/mizuchi-uploadr)
 
-A high-performance **upload-only** S3 proxy built with Cloudflare's Pingora framework, featuring Linux kernel zero-copy optimization for maximum throughput.
+A high-performance **upload-only** S3 proxy built in Rust, featuring Linux kernel zero-copy optimization for maximum throughput.
 
 ## Features
 
 - **Upload Only** - No download/list operations; security by design
-- **S3 Compatible** - Works with AWS SDKs and S3 tools
+- **S3 Compatible** - Works with AWS SDKs, MinIO, and S3-compatible services
 - **Zero-Copy Transfer** - Linux `splice(2)`/`sendfile(2)` for 50-250x speedup
 - **Cross-Platform** - Falls back to tokio buffered I/O on macOS/Windows
 - **Flexible Auth** - JWT (HS256/RS256/ES256), AWS SigV4, JWKS endpoints
 - **Fine-Grained AuthZ** - OPA policies, OpenFGA integration
-- **Production Ready** - Prometheus metrics, OpenTelemetry tracing
+- **Production Ready** - Prometheus metrics, OpenTelemetry distributed tracing
+- **Thoroughly Tested** - 75 unit tests + 44 E2E tests with MinIO
 
 ## Performance
 
@@ -147,10 +149,18 @@ mizuchi-uploadr/
 └── docs/                   # Documentation
 ```
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [API Reference](docs/API.md) | S3 operations, authentication, authorization |
+| [Configuration](docs/CONFIG.md) | Complete configuration reference |
+| [Deployment](docs/DEPLOYMENT.md) | Docker, Kubernetes, bare metal deployment |
+| [Tracing](docs/TRACING.md) | OpenTelemetry distributed tracing setup |
+
 ## Related Projects
 
 - **[Yatagarasu](https://github.com/julianshen/yatagarasu)** - Read-only S3 proxy (sister project)
-- **[Pingora](https://github.com/cloudflare/pingora)** - Underlying proxy framework
 
 ## License
 
