@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build stage
-FROM --platform=$BUILDPLATFORM rust:1.83-bookworm AS builder
+FROM --platform=$BUILDPLATFORM rust:1.85-bookworm AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -20,16 +20,19 @@ RUN case "$TARGETPLATFORM" in \
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
 
-# Create dummy source to cache dependencies
-RUN mkdir src && \
+# Create dummy source and bench files to cache dependencies
+RUN mkdir -p src benches && \
     echo "fn main() {}" > src/main.rs && \
-    echo "pub fn lib() {}" > src/lib.rs
+    echo "pub fn lib() {}" > src/lib.rs && \
+    echo "fn main() {}" > benches/upload_benchmark.rs && \
+    echo "fn main() {}" > benches/zero_copy_benchmark.rs && \
+    echo "fn main() {}" > benches/tracing_benchmark.rs
 
 # Build dependencies (cache layer)
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cargo build --release && \
-    rm -rf src
+    rm -rf src benches
 
 # Copy actual source
 COPY src ./src
@@ -49,14 +52,19 @@ LABEL org.opencontainers.image.source="https://github.com/julianshen/mizuchi-upl
 LABEL org.opencontainers.image.description="High-performance upload-only S3 proxy"
 LABEL org.opencontainers.image.licenses="MIT"
 
+# Install runtime dependencies
+# Note: libssl3 is named differently on some architectures (libssl3t64 on arm64)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
-        libssl3 \
         curl && \
+    # Install OpenSSL - try libssl3 first, fall back to libssl3t64
+    (apt-get install -y --no-install-recommends libssl3 2>/dev/null || \
+     apt-get install -y --no-install-recommends libssl3t64 2>/dev/null || \
+     true) && \
     rm -rf /var/lib/apt/lists/* && \
-    # Create non-root user
-    useradd -r -s /bin/false -u 65534 mizuchi && \
+    # Create non-root user (use UID 10001 to avoid conflicts with nobody/65534)
+    useradd -r -s /bin/false -u 10001 mizuchi && \
     mkdir -p /etc/mizuchi /var/lib/mizuchi && \
     chown -R mizuchi:mizuchi /etc/mizuchi /var/lib/mizuchi
 
