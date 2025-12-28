@@ -1,0 +1,62 @@
+# Mizuchi Uploadr Configuration
+# Full-feature example for Docker Compose environment
+
+server:
+  address: "0.0.0.0:8080"
+  zero_copy:
+    enabled: true           # Linux kernel zero-copy (auto-fallback on macOS/Windows)
+    pipe_buffer_size: 1048576  # 1MB pipe buffer
+
+# Bucket configurations
+buckets:
+  # Public bucket - no authentication required
+  - name: "public-uploads"
+    path_prefix: "/uploads"
+    s3:
+      bucket: "uploads"
+      region: "us-east-1"
+      endpoint: "http://minio:9000"
+      access_key: "${AWS_ACCESS_KEY}"
+      secret_key: "${AWS_SECRET_KEY}"
+    auth:
+      enabled: false
+    upload:
+      multipart_threshold: 52428800    # 50MB - files larger than this use multipart
+      part_size: 10485760              # 10MB per part
+      concurrent_parts: 4              # Upload 4 parts in parallel
+
+  # Private bucket - JWT authentication required
+  - name: "private-uploads"
+    path_prefix: "/private"
+    s3:
+      bucket: "private"
+      region: "us-east-1"
+      endpoint: "http://minio:9000"
+      access_key: "${AWS_ACCESS_KEY}"
+      secret_key: "${AWS_SECRET_KEY}"
+    auth:
+      enabled: true
+      jwt:
+        algorithm: "HS256"
+        secret: "${JWT_SECRET}"
+        token_sources:
+          - type: "bearer"             # Authorization: Bearer <token>
+          - type: "query"
+            name: "token"              # ?token=<token>
+    upload:
+      multipart_threshold: 52428800    # 50MB
+      part_size: 10485760              # 10MB per part
+      concurrent_parts: 4
+
+# Prometheus metrics
+metrics:
+  enabled: true
+  port: 9090
+
+# OpenTelemetry tracing (optional)
+# tracing:
+#   enabled: true
+#   otlp_endpoint: "http://jaeger:4317"
+#   service_name: "mizuchi-uploadr"
+#   sampling_strategy: "ratio"
+#   sampling_ratio: 0.1
