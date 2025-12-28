@@ -225,11 +225,28 @@ impl PingoraServer {
 }
 
 /// Find a bucket configuration that matches the request path
+///
+/// This function matches on path prefix boundaries and returns the longest matching prefix
+/// to avoid mis-routing (e.g., `/uploads2/...` should not match `/uploads`).
 fn find_bucket_for_path<'a>(config: &'a Config, path: &str) -> Option<&'a BucketConfig> {
     config
         .buckets
         .iter()
-        .find(|bucket| path.starts_with(&bucket.path_prefix))
+        .filter(|bucket| {
+            // Match on prefix boundary: path must either equal prefix exactly,
+            // or continue with '/' after prefix
+            if path == bucket.path_prefix {
+                true
+            } else if path.starts_with(&bucket.path_prefix) {
+                // Check that the character after prefix is '/' to ensure boundary match
+                let after_prefix = &path[bucket.path_prefix.len()..];
+                after_prefix.starts_with('/')
+            } else {
+                false
+            }
+        })
+        // Return the longest matching prefix to handle overlapping prefixes correctly
+        .max_by_key(|bucket| bucket.path_prefix.len())
 }
 
 /// Build AuthRequest from hyper Request headers
@@ -367,6 +384,14 @@ async fn handle_request(
                             .expect("Failed to build 401 response"));
                     }
                 }
+            } else {
+                // Fail-closed: auth enabled but no JWT config means deny access
+                error!("Auth enabled but no JWT config for bucket {}", bucket.name);
+                return Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .header("Content-Type", "text/plain")
+                    .body("Server configuration error".to_string())
+                    .expect("Failed to build error response"));
             }
         }
 
@@ -426,6 +451,16 @@ async fn handle_request(
             .strip_prefix(&bucket.path_prefix)
             .unwrap_or(&path)
             .trim_start_matches('/');
+
+        // Validate S3 key is not empty
+        if s3_key.is_empty() {
+            warn!("Empty S3 key for path: {}", path);
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header("Content-Type", "text/plain")
+                .body("Invalid key: object key cannot be empty".to_string())
+                .expect("Failed to build error response"));
+        }
 
         // Upload to S3
         match s3_client

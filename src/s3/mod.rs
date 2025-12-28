@@ -267,12 +267,15 @@ impl S3Client {
         &self.config.region
     }
 
-    /// Get the endpoint URL
+    /// Get the endpoint URL (normalized without trailing slash)
     pub fn endpoint(&self) -> String {
-        self.config
+        let endpoint = self
+            .config
             .endpoint
             .clone()
-            .unwrap_or_else(|| format!("https://s3.{}.amazonaws.com", self.config.region))
+            .unwrap_or_else(|| format!("https://s3.{}.amazonaws.com", self.config.region));
+        // Strip trailing slash to avoid double slashes when constructing URLs
+        endpoint.trim_end_matches('/').to_string()
     }
 
     /// Get the host from the endpoint URL
