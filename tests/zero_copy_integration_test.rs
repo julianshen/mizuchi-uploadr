@@ -106,7 +106,10 @@ mod tests {
                 .read_to_end(&mut dest_data)
                 .unwrap();
 
-            assert_eq!(dest_data, test_data, "Data should be identical after transfer");
+            assert_eq!(
+                dest_data, test_data,
+                "Data should be identical after transfer"
+            );
         }
 
         /// Test zero-copy with various buffer sizes
@@ -177,7 +180,10 @@ mod tests {
         let supports = handler.supports_zero_copy();
 
         #[cfg(target_os = "linux")]
-        assert!(supports, "PutObjectHandler should support zero-copy on Linux");
+        assert!(
+            supports,
+            "PutObjectHandler should support zero-copy on Linux"
+        );
 
         #[cfg(not(target_os = "linux"))]
         assert!(
@@ -199,7 +205,10 @@ mod tests {
         let supports = handler.supports_zero_copy();
 
         #[cfg(target_os = "linux")]
-        assert!(supports, "MultipartHandler should support zero-copy on Linux");
+        assert!(
+            supports,
+            "MultipartHandler should support zero-copy on Linux"
+        );
 
         #[cfg(not(target_os = "linux"))]
         assert!(

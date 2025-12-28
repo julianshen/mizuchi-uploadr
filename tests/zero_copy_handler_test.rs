@@ -65,7 +65,10 @@ mod tests {
             let data = Bytes::from(vec![0u8; 1024]);
             let temp = TempFileUpload::from_bytes(data).expect("Should create temp file");
             path = temp.path().to_path_buf();
-            assert!(path.exists(), "Temp file should exist while TempFileUpload is alive");
+            assert!(
+                path.exists(),
+                "Temp file should exist while TempFileUpload is alive"
+            );
         }
         // TempFileUpload dropped here
 
@@ -89,8 +92,7 @@ mod tests {
 
         let hash = temp.content_hash();
         assert_eq!(
-            hash,
-            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            hash, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
             "SHA256 hash should match known value"
         );
     }
@@ -107,8 +109,7 @@ mod tests {
 
         let hash = temp.content_hash();
         assert_eq!(
-            hash,
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "Empty file SHA256 should match known value"
         );
     }
@@ -126,7 +127,10 @@ mod tests {
         let data = Bytes::from(vec![0u8; 1024]);
         let temp = TempFileUpload::from_bytes(data).expect("Should create temp file");
 
-        assert!(temp.supports_zero_copy(), "Zero-copy should be available on Linux");
+        assert!(
+            temp.supports_zero_copy(),
+            "Zero-copy should be available on Linux"
+        );
     }
 
     /// Test that fallback is used on non-Linux

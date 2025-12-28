@@ -8,8 +8,8 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-pub mod jwt;
 pub mod jwks;
+pub mod jwt;
 pub mod sigv4;
 
 #[cfg(feature = "tracing")]

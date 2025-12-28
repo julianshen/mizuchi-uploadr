@@ -48,9 +48,7 @@ mod tests {
         Claims {
             sub: "user123".to_string(),
             exp: (chrono::Utc::now() - chrono::Duration::hours(1)).timestamp() as usize,
-            iat: Some(
-                (chrono::Utc::now() - chrono::Duration::hours(2)).timestamp() as usize,
-            ),
+            iat: Some((chrono::Utc::now() - chrono::Duration::hours(2)).timestamp() as usize),
             iss: None,
             aud: None,
         }
@@ -336,7 +334,10 @@ P2qpWPDC/qNK83UOu9Y26VY7qwVH4M6D8jPXpN8jSGwgCdVCpI5aEiYgbg==
         // Should be able to find key by kid
         assert!(auth.find_key("key-1").await.is_some(), "Should find key-1");
         assert!(auth.find_key("key-2").await.is_some(), "Should find key-2");
-        assert!(auth.find_key("key-3").await.is_none(), "Should not find key-3");
+        assert!(
+            auth.find_key("key-3").await.is_none(),
+            "Should not find key-3"
+        );
     }
 
     /// Test JWKS key caching
@@ -423,7 +424,10 @@ P2qpWPDC/qNK83UOu9Y26VY7qwVH4M6D8jPXpN8jSGwgCdVCpI5aEiYgbg==
         };
 
         let result = auth.authenticate(&request).await;
-        assert!(result.is_ok(), "Should extract token from Authorization header");
+        assert!(
+            result.is_ok(),
+            "Should extract token from Authorization header"
+        );
     }
 
     #[tokio::test]

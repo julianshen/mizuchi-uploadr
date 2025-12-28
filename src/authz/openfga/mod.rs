@@ -345,7 +345,11 @@ impl OpenFgaAuthorizer {
             .await
             .map_err(|e| AuthzError::BackendError(e.to_string()))?;
 
-        Ok(batch_response.results.into_iter().map(|r| r.allowed).collect())
+        Ok(batch_response
+            .results
+            .into_iter()
+            .map(|r| r.allowed)
+            .collect())
     }
 }
 
@@ -465,9 +469,7 @@ mod tests {
 
     #[test]
     fn test_builder_missing_url() {
-        let result = OpenFgaAuthorizer::builder()
-            .store_id("store123")
-            .build();
+        let result = OpenFgaAuthorizer::builder().store_id("store123").build();
         assert!(result.is_err());
     }
 

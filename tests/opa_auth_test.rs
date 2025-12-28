@@ -3,7 +3,7 @@
 //! Tests for OPA policy evaluation using a mock server.
 
 use mizuchi_uploadr::authz::opa::{OpaAuthorizer, OpaConfig};
-use mizuchi_uploadr::authz::{AuthzRequest, Authorizer};
+use mizuchi_uploadr::authz::{Authorizer, AuthzRequest};
 use std::collections::HashMap;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};

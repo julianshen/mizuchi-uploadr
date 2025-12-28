@@ -381,12 +381,13 @@ impl Authenticator for JwksAuthenticator {
         }
 
         // Decode and validate token
-        let token_data = decode::<super::jwt::Claims>(&token, &decoding_key, &validation)
-            .map_err(|e| match e.kind() {
+        let token_data = decode::<super::jwt::Claims>(&token, &decoding_key, &validation).map_err(
+            |e| match e.kind() {
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
                 jsonwebtoken::errors::ErrorKind::InvalidSignature => AuthError::InvalidSignature,
                 _ => AuthError::InvalidToken(e.to_string()),
-            })?;
+            },
+        )?;
 
         // Build result
         let mut claims_map = HashMap::new();

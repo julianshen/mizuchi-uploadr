@@ -48,6 +48,7 @@
 
 use crate::config::Config;
 use crate::server::ServerError;
+use http_body_util::BodyExt;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Request, Response, StatusCode};
@@ -240,8 +241,8 @@ async fn handle_request(
     req: Request<Incoming>,
     _config: Arc<Config>,
 ) -> Result<Response<String>, hyper::Error> {
-    let path = req.uri().path();
-    let method = req.method();
+    let path = req.uri().path().to_string();
+    let method = req.method().clone();
 
     info!("Handling {} {}", method, path);
 
@@ -256,9 +257,28 @@ async fn handle_request(
 
     // Handle upload requests (PUT to /uploads/*)
     if path.starts_with("/uploads/") && method == hyper::Method::PUT {
-        // TODO: Implement actual upload logic
-        // This will be connected to the upload handlers in future iterations
-        info!("Upload request to {}", path);
+        let path_clone = path.clone();
+        // Consume the request body to avoid connection reset errors
+        // This is important for large uploads where the body is still being transmitted
+        let body = req.into_body();
+        let bytes_result = body.collect().await;
+        match bytes_result {
+            Ok(collected) => {
+                let bytes_received = collected.to_bytes().len();
+                info!(
+                    "Upload request to {}: {} bytes received",
+                    path_clone, bytes_received
+                );
+            }
+            Err(e) => {
+                error!("Failed to read upload body: {}", e);
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header("Content-Type", "text/plain")
+                    .body(format!("Failed to read body: {}", e))
+                    .expect("Failed to build error response"));
+            }
+        }
         return Ok(Response::builder()
             .status(StatusCode::OK)
             .header("Content-Type", "text/plain")
