@@ -1,0 +1,114 @@
+version: "3.8"
+
+# Mizuchi Uploadr Full-Feature Development Environment
+# Usage: docker-compose up -d
+
+services:
+  # MinIO - S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: mizuchi-minio
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Create default bucket on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: mizuchi-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin123;
+      mc mb myminio/uploads --ignore-existing;
+      mc mb myminio/private --ignore-existing;
+      mc anonymous set upload myminio/uploads;
+      echo 'Buckets created successfully';
+      exit 0;
+      "
+
+  # Mizuchi Uploadr - S3 Upload Proxy
+  mizuchi:
+    image: ghcr.io/julianshen/mizuchi-uploadr:latest
+    container_name: mizuchi-uploadr
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"   # Main API
+      - "9090:9090"   # Metrics
+    environment:
+      # S3 Backend Configuration
+      AWS_ACCESS_KEY: minioadmin
+      AWS_SECRET_KEY: minioadmin123
+      # JWT Authentication
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      # Logging
+      RUST_LOG: info
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    command: ["--config", "/app/config.yaml"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Prometheus (optional - for metrics collection)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mizuchi-prometheus
+    profiles:
+      - monitoring
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - mizuchi
+
+  # Grafana (optional - for metrics visualization)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mizuchi-grafana
+    profiles:
+      - monitoring
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: mizuchi-network
