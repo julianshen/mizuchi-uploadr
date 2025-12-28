@@ -1,0 +1,34 @@
+server:
+  address: "0.0.0.0:8080"
+  zero_copy:
+    enabled: false  # Disable in dev for macOS compatibility
+
+buckets:
+  - name: "uploads"
+    path_prefix: "/uploads"
+    s3:
+      bucket: "${S3_BUCKET}"
+      region: "${AWS_REGION}"
+      endpoint: "http://minio:9000"
+      access_key: "${AWS_ACCESS_KEY_ID}"
+      secret_key: "${AWS_SECRET_ACCESS_KEY}"
+    auth:
+      enabled: false
+    upload:
+      multipart_threshold: 10485760  # 10MB for faster testing
+      part_size: 5242880             # 5MB
+      concurrent_parts: 2
+
+metrics:
+  enabled: true
+  port: 9090
+
+tracing:
+  enabled: true
+  service_name: "mizuchi-uploadr-dev"
+  otlp:
+    endpoint: "http://jaeger:4317"
+    protocol: "grpc"
+  sampling:
+    strategy: "always"
+    ratio: 1.0

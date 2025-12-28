@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mizuchi-dev
+
+namePrefix: dev-
+
+commonLabels:
+  app.kubernetes.io/instance: dev
+  environment: development
+
+resources:
+  - ../../base
+  - secret.yaml
+
+patches:
+  - path: deployment-patch.yaml
+
+configMapGenerator:
+  - name: mizuchi-uploadr-config
+    behavior: replace
+    files:
+      - config.yaml
+
+images:
+  - name: ghcr.io/julianshen/mizuchi-uploadr
+    newTag: latest

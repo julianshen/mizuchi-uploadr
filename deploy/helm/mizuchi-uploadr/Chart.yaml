@@ -1,0 +1,18 @@
+apiVersion: v2
+name: mizuchi-uploadr
+description: A high-performance upload-only S3 proxy with zero-copy optimization
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/julianshen/mizuchi-uploadr
+sources:
+  - https://github.com/julianshen/mizuchi-uploadr
+maintainers:
+  - name: Julian Shen
+    url: https://github.com/julianshen
+keywords:
+  - s3
+  - proxy
+  - upload
+  - storage
+  - zero-copy

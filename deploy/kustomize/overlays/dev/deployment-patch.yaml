@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mizuchi-uploadr
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: mizuchi-uploadr
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

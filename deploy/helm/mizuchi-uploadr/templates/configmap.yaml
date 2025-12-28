@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mizuchi-uploadr.fullname" . }}
+  labels:
+    {{- include "mizuchi-uploadr.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    server:
+      address: {{ .Values.config.server.address | quote }}
+      zero_copy:
+        enabled: {{ .Values.config.server.zeroCopy.enabled }}
+        pipe_buffer_size: {{ .Values.config.server.zeroCopy.pipeBufferSize }}
+
+    buckets:
+      {{- range .Values.config.buckets }}
+      - name: {{ .name | quote }}
+        path_prefix: {{ .pathPrefix | quote }}
+        s3:
+          bucket: {{ .s3.bucket | quote }}
+          region: {{ .s3.region | quote }}
+          {{- if .s3.endpoint }}
+          endpoint: {{ .s3.endpoint | quote }}
+          {{- end }}
+          access_key: "${AWS_ACCESS_KEY_ID}"
+          secret_key: "${AWS_SECRET_ACCESS_KEY}"
+        auth:
+          enabled: {{ .auth.enabled }}
+          {{- if .auth.enabled }}
+          jwt:
+            algorithm: {{ .auth.jwt.algorithm | quote }}
+            secret: "${JWT_SECRET}"
+          {{- end }}
+        upload:
+          multipart_threshold: {{ .upload.multipartThreshold }}
+          part_size: {{ .upload.partSize }}
+          concurrent_parts: {{ .upload.concurrentParts }}
+      {{- end }}
+
+    metrics:
+      enabled: {{ .Values.config.metrics.enabled }}
+      port: {{ .Values.config.metrics.port }}
+
+    {{- if .Values.config.tracing.enabled }}
+    tracing:
+      enabled: true
+      service_name: {{ .Values.config.tracing.serviceName | quote }}
+      otlp:
+        endpoint: {{ .Values.config.tracing.otlp.endpoint | quote }}
+        protocol: {{ .Values.config.tracing.otlp.protocol | quote }}
+      sampling:
+        strategy: {{ .Values.config.tracing.sampling.strategy | quote }}
+        ratio: {{ .Values.config.tracing.sampling.ratio }}
+    {{- end }}

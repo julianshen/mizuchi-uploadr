@@ -1,0 +1,70 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+{{- if .Values.ingress.enabled }}
+
+Mizuchi Uploadr is accessible via:
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+
+{{- else if contains "NodePort" .Values.service.type }}
+
+Get the application URL by running these commands:
+
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mizuchi-uploadr.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+Get the application URL by running these commands:
+
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        You can watch the status of by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "mizuchi-uploadr.fullname" . }}'
+
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "mizuchi-uploadr.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+
+{{- else if contains "ClusterIP" .Values.service.type }}
+
+The service is exposed internally as {{ include "mizuchi-uploadr.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+To access it from your local machine, run:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "mizuchi-uploadr.fullname" . }} 8080:{{ .Values.service.port }}
+
+Then visit http://localhost:8080
+
+{{- end }}
+
+{{- if .Values.metricsService.enabled }}
+
+Prometheus metrics are available at:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "mizuchi-uploadr.fullname" . }}-metrics {{ .Values.metricsService.port }}:{{ .Values.metricsService.port }}
+
+Then visit http://localhost:{{ .Values.metricsService.port }}/metrics
+
+{{- end }}
+
+Health check endpoint:
+
+  curl http://<service-address>/health
+
+Example upload:
+
+  curl -X PUT http://<service-address>/uploads/test.txt \
+    -H "Content-Type: text/plain" \
+    {{- if (index .Values.config.buckets 0).auth.enabled }}
+    -H "Authorization: Bearer <your-jwt-token>" \
+    {{- end }}
+    -d "Hello, Mizuchi!"

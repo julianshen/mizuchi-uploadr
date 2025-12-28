@@ -1,0 +1,44 @@
+server:
+  address: "0.0.0.0:8080"
+  zero_copy:
+    enabled: true
+    pipe_buffer_size: 2097152  # 2MB for production
+
+buckets:
+  - name: "uploads"
+    path_prefix: "/uploads"
+    s3:
+      bucket: "${S3_BUCKET}"
+      region: "${AWS_REGION}"
+      access_key: "${AWS_ACCESS_KEY_ID}"
+      secret_key: "${AWS_SECRET_ACCESS_KEY}"
+    auth:
+      enabled: true
+      jwt:
+        algorithm: "RS256"
+        jwks_url: "${JWKS_URL}"
+        issuer: "${JWT_ISSUER}"
+        audience: "mizuchi-uploadr"
+    upload:
+      multipart_threshold: 52428800   # 50MB
+      part_size: 104857600            # 100MB
+      concurrent_parts: 8
+
+metrics:
+  enabled: true
+  port: 9090
+
+tracing:
+  enabled: true
+  service_name: "mizuchi-uploadr-prod"
+  otlp:
+    endpoint: "${OTLP_ENDPOINT}"
+    protocol: "grpc"
+    compression: "gzip"
+  sampling:
+    strategy: "ratio"
+    ratio: 0.1  # 10% sampling in production
+  batch:
+    max_queue_size: 4096
+    scheduled_delay_millis: 5000
+    max_export_batch_size: 1024

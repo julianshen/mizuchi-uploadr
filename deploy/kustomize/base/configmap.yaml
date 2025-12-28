@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mizuchi-uploadr-config
+data:
+  config.yaml: |
+    server:
+      address: "0.0.0.0:8080"
+      zero_copy:
+        enabled: true
+        pipe_buffer_size: 1048576
+
+    buckets:
+      - name: "uploads"
+        path_prefix: "/uploads"
+        s3:
+          bucket: "${S3_BUCKET}"
+          region: "${AWS_REGION}"
+          access_key: "${AWS_ACCESS_KEY_ID}"
+          secret_key: "${AWS_SECRET_ACCESS_KEY}"
+        auth:
+          enabled: false
+        upload:
+          multipart_threshold: 52428800
+          part_size: 104857600
+          concurrent_parts: 4
+
+    metrics:
+      enabled: true
+      port: 9090
