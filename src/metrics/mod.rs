@@ -104,7 +104,9 @@ pub fn record_upload_duration(bucket: &str, method: &str, duration_secs: f64) {
 pub fn record_data_transfer(bytes: u64, duration_secs: f64, zero_copy: bool) {
     let mode = if zero_copy { "zero_copy" } else { "buffered" };
     ZERO_COPY_TRANSFERS.with_label_values(&[mode]).inc();
-    ZERO_COPY_DURATION.with_label_values(&[mode]).observe(duration_secs);
+    ZERO_COPY_DURATION
+        .with_label_values(&[mode])
+        .observe(duration_secs);
 
     if zero_copy {
         ZERO_COPY_BYTES.inc_by(bytes as f64);

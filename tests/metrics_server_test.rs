@@ -58,7 +58,10 @@ mod tests {
         // Prometheus text format
         assert!(
             content_type.to_str().unwrap().contains("text/plain")
-                || content_type.to_str().unwrap().contains("text/plain; version=0.0.4"),
+                || content_type
+                    .to_str()
+                    .unwrap()
+                    .contains("text/plain; version=0.0.4"),
             "Content-Type should be Prometheus text format"
         );
 

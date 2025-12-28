@@ -16,9 +16,13 @@
 //! # Example
 //!
 //! ```
-//! use mizuchi_uploadr::s3::{CredentialsProvider, StaticCredentials};
+//! use mizuchi_uploadr::s3::{Credentials, StaticCredentials, CredentialsProviderTrait};
 //!
-//! let creds = StaticCredentials::new("access-key", "secret-key");
+//! // Create static credentials
+//! let provider = StaticCredentials::new("access-key", "secret-key");
+//!
+//! // Access credentials through the trait method
+//! let creds = provider.credentials();
 //! assert_eq!(creds.access_key_id(), "access-key");
 //! assert_eq!(creds.secret_access_key(), "secret-key");
 //! ```

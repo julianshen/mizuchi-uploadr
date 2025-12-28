@@ -15,8 +15,8 @@
 //! use mizuchi_uploadr::s3::S3ClientPool;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Load config
-//! let config = Config::default();
+//! // Load config from file
+//! let config = Config::load("config.yaml")?;
 //!
 //! // Create pool
 //! let pool = S3ClientPool::new(&config).await?;
@@ -81,7 +81,7 @@ impl S3ClientPool {
     /// use mizuchi_uploadr::s3::S3ClientPool;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let config = Config::default();
+    /// let config = Config::load("config.yaml")?;
     /// let pool = S3ClientPool::new(&config).await?;
     /// assert!(pool.client_count() >= 0);
     /// # Ok(())
@@ -135,7 +135,7 @@ impl S3ClientPool {
     /// # use mizuchi_uploadr::config::Config;
     /// # use mizuchi_uploadr::s3::S3ClientPool;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let config = Config::default();
+    /// # let config = Config::load("config.yaml")?;
     /// let pool = S3ClientPool::new(&config).await?;
     ///
     /// if let Some(client) = pool.get_client("uploads") {

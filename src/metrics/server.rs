@@ -179,10 +179,10 @@ impl MetricsServer {
     }
 
     /// Gracefully shutdown the metrics server
-    #[cfg_attr(feature = "tracing", tracing::instrument(
-        name = "metrics_server.shutdown",
-        skip(self)
-    ))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(name = "metrics_server.shutdown", skip(self))
+    )]
     pub async fn shutdown(&mut self) {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
@@ -306,7 +306,10 @@ mod tests {
     fn test_builder_missing_address() {
         let result = MetricsServerBuilder::default().build();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Address is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Address is required"));
     }
 
     #[test]

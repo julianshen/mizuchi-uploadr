@@ -44,11 +44,11 @@ fn benchmark_creation(c: &mut Criterion) {
 
     // Test sizes: 1KB, 10KB, 100KB, 1MB, 5MB, 10MB
     let sizes: Vec<usize> = vec![
-        1024,           // 1 KB
-        10 * 1024,      // 10 KB
-        100 * 1024,     // 100 KB
-        1024 * 1024,    // 1 MB
-        5 * 1024 * 1024, // 5 MB
+        1024,             // 1 KB
+        10 * 1024,        // 10 KB
+        100 * 1024,       // 100 KB
+        1024 * 1024,      // 1 MB
+        5 * 1024 * 1024,  // 5 MB
         10 * 1024 * 1024, // 10 MB
     ];
 

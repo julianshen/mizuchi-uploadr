@@ -171,8 +171,7 @@ impl SigV4Authenticator {
 
     /// Compute HMAC-SHA256
     fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
-        let mut mac =
-            HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
         mac.update(data);
         mac.finalize().into_bytes().to_vec()
     }
@@ -210,12 +209,9 @@ impl SigV4Authenticator {
         // Canonical headers (sorted, lowercase)
         let mut canonical_headers = String::new();
         for header in signed_headers {
-            let value = request
-                .headers
-                .get(header)
-                .ok_or_else(|| {
-                    AuthError::InvalidToken(format!("Missing signed header: {}", header))
-                })?;
+            let value = request.headers.get(header).ok_or_else(|| {
+                AuthError::InvalidToken(format!("Missing signed header: {}", header))
+            })?;
             canonical_headers.push_str(&format!("{}:{}\n", header, value.trim()));
         }
 
@@ -231,7 +227,12 @@ impl SigV4Authenticator {
 
         Ok(format!(
             "{}\n{}\n{}\n{}\n{}\n{}",
-            method, canonical_uri, canonical_query, canonical_headers, signed_headers_str, payload_hash
+            method,
+            canonical_uri,
+            canonical_query,
+            canonical_headers,
+            signed_headers_str,
+            payload_hash
         ))
     }
 
@@ -253,10 +254,8 @@ impl SigV4Authenticator {
         let parsed = chrono::NaiveDateTime::parse_from_str(timestamp, "%Y%m%dT%H%M%SZ")
             .map_err(|_| AuthError::InvalidToken("Invalid timestamp format".into()))?;
 
-        let request_time = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-            parsed,
-            chrono::Utc,
-        );
+        let request_time =
+            chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(parsed, chrono::Utc);
         let now = chrono::Utc::now();
         let diff = (now - request_time).num_seconds().abs();
 
@@ -325,8 +324,7 @@ impl Authenticator for SigV4Authenticator {
             })?;
 
         // Step 5: Build canonical request
-        let canonical_request =
-            Self::build_canonical_request(request, &parsed.signed_headers)?;
+        let canonical_request = Self::build_canonical_request(request, &parsed.signed_headers)?;
         let canonical_request_hash = Self::sha256_hex(canonical_request.as_bytes());
 
         // Step 6: Build string to sign
@@ -337,13 +335,10 @@ impl Authenticator for SigV4Authenticator {
         );
 
         // Step 7: Derive signing key and compute signature
-        let signing_key = Self::derive_signing_key(
-            secret_key,
-            &parsed.date,
-            &parsed.region,
-            &parsed.service,
-        );
-        let computed_signature = hex::encode(Self::hmac_sha256(&signing_key, string_to_sign.as_bytes()));
+        let signing_key =
+            Self::derive_signing_key(secret_key, &parsed.date, &parsed.region, &parsed.service);
+        let computed_signature =
+            hex::encode(Self::hmac_sha256(&signing_key, string_to_sign.as_bytes()));
 
         // Step 8: Compare signatures (constant-time)
         if !Self::constant_time_compare(&computed_signature, &parsed.signature) {

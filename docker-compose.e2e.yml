@@ -1,0 +1,80 @@
+# Docker Compose configuration for E2E testing with MinIO
+#
+# Usage:
+#   docker-compose -f docker-compose.e2e.yml up -d
+#   cargo test --test e2e_test
+#   docker-compose -f docker-compose.e2e.yml down
+
+services:
+  # MinIO - S3-compatible storage (stable for testing)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e-net
+
+  # Create test buckets
+  bucket-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for MinIO to be ready...';
+      sleep 2;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/e2e-test-bucket --ignore-existing;
+      mc mb myminio/uploads --ignore-existing;
+      mc mb myminio/private --ignore-existing;
+      echo 'Buckets created successfully!';
+      exit 0;
+      "
+    networks:
+      - e2e-net
+
+  # Jaeger for distributed tracing (optional)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "16686:16686" # Jaeger UI
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - e2e-net
+    profiles:
+      - tracing
+
+  # Prometheus for metrics collection (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.e2e.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - e2e-net
+    profiles:
+      - metrics
+
+volumes:
+  minio-data:
+
+networks:
+  e2e-net:
+    driver: bridge

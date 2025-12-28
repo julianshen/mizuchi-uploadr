@@ -103,11 +103,7 @@ mod tests {
     }
 
     /// Create a properly signed request
-    fn create_valid_signed_request(
-        method: &str,
-        path: &str,
-        body: &[u8],
-    ) -> AuthRequest {
+    fn create_valid_signed_request(method: &str, path: &str, body: &[u8]) -> AuthRequest {
         let timestamp = current_timestamp();
         let date = current_date();
         let content_hash = sha256_hex(body);
@@ -122,11 +118,7 @@ mod tests {
 
         let canonical_request = format!(
             "{}\n{}\n\n{}\n{}\n{}",
-            method,
-            path,
-            canonical_headers,
-            signed_headers,
-            content_hash
+            method, path, canonical_headers, signed_headers, content_hash
         );
 
         let canonical_request_hash = sha256_hex(canonical_request.as_bytes());
@@ -153,7 +145,13 @@ mod tests {
             TEST_ACCESS_KEY, credential_scope, signed_headers, signature
         );
 
-        create_request_with_auth(method, path, &authorization, &timestamp, Some(&content_hash))
+        create_request_with_auth(
+            method,
+            path,
+            &authorization,
+            &timestamp,
+            Some(&content_hash),
+        )
     }
 
     // ========================================================================
@@ -215,7 +213,10 @@ mod tests {
             "AWS4-HMAC-SHA256 Credential={}/{}/{}/{}/aws4_request, \
              SignedHeaders=host;x-amz-content-sha256;x-amz-date, \
              Signature=0000000000000000000000000000000000000000000000000000000000000000",
-            TEST_ACCESS_KEY, current_date(), TEST_REGION, TEST_SERVICE
+            TEST_ACCESS_KEY,
+            current_date(),
+            TEST_REGION,
+            TEST_SERVICE
         );
 
         let request = create_request_with_auth(
@@ -284,7 +285,8 @@ mod tests {
             canonical_headers, signed_headers, content_hash
         );
         let canonical_request_hash = sha256_hex(canonical_request.as_bytes());
-        let credential_scope = format!("{}/{}/{}/aws4_request", old_date, TEST_REGION, TEST_SERVICE);
+        let credential_scope =
+            format!("{}/{}/{}/aws4_request", old_date, TEST_REGION, TEST_SERVICE);
         let string_to_sign = format!(
             "AWS4-HMAC-SHA256\n{}\n{}\n{}",
             old_timestamp, credential_scope, canonical_request_hash
@@ -311,7 +313,10 @@ mod tests {
 
         let result = auth.authenticate(&request).await;
         assert!(
-            matches!(result, Err(AuthError::InvalidToken(_)) | Err(AuthError::TokenExpired)),
+            matches!(
+                result,
+                Err(AuthError::InvalidToken(_)) | Err(AuthError::TokenExpired)
+            ),
             "Expired timestamp should be rejected: {:?}",
             result
         );
@@ -343,7 +348,10 @@ mod tests {
             canonical_headers, signed_headers, content_hash
         );
         let canonical_request_hash = sha256_hex(canonical_request.as_bytes());
-        let credential_scope = format!("{}/{}/{}/aws4_request", future_date, TEST_REGION, TEST_SERVICE);
+        let credential_scope = format!(
+            "{}/{}/{}/aws4_request",
+            future_date, TEST_REGION, TEST_SERVICE
+        );
         let string_to_sign = format!(
             "AWS4-HMAC-SHA256\n{}\n{}\n{}",
             future_timestamp, credential_scope, canonical_request_hash
@@ -392,7 +400,10 @@ mod tests {
             "AWS4-HMAC-SHA256 Credential={}/{}/{}/{}/aws4_request, \
              SignedHeaders=host;x-amz-content-sha256, \
              Signature=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-            TEST_ACCESS_KEY, current_date(), TEST_REGION, TEST_SERVICE
+            TEST_ACCESS_KEY,
+            current_date(),
+            TEST_REGION,
+            TEST_SERVICE
         );
 
         let mut headers = HashMap::new();
@@ -435,7 +446,9 @@ mod tests {
             "AWS4-HMAC-SHA256 Credential=UNKNOWN_KEY/{}/{}/{}/aws4_request, \
              SignedHeaders=host;x-amz-content-sha256;x-amz-date, \
              Signature=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-            current_date(), TEST_REGION, TEST_SERVICE
+            current_date(),
+            TEST_REGION,
+            TEST_SERVICE
         );
 
         let request = create_request_with_auth(
@@ -464,7 +477,10 @@ mod tests {
         let auth = SigV4Authenticator::new(TEST_SERVICE, TEST_REGION);
 
         let mut headers = HashMap::new();
-        headers.insert("authorization".to_string(), "Basic dXNlcjpwYXNz".to_string());
+        headers.insert(
+            "authorization".to_string(),
+            "Basic dXNlcjpwYXNz".to_string(),
+        );
         headers.insert("host".to_string(), "s3.us-east-1.amazonaws.com".to_string());
         headers.insert("x-amz-date".to_string(), current_timestamp());
 
