@@ -46,8 +46,9 @@ mod tests {
         let mock_server = MockServer::start().await;
 
         // Mock S3 CreateMultipartUpload response
+        // Note: S3 client constructs URLs as {endpoint}/{bucket}/{key}
         Mock::given(method("POST"))
-            .and(path("/test-key.bin"))
+            .and(path("/test-bucket/test-key.bin"))
             .and(query_param("uploads", ""))
             .respond_with(ResponseTemplate::new(200).set_body_string(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -86,7 +87,7 @@ mod tests {
 
         // Mock CreateMultipartUpload
         Mock::given(method("POST"))
-            .and(path("/test-key.bin"))
+            .and(path("/test-bucket/test-key.bin"))
             .and(query_param("uploads", ""))
             .respond_with(ResponseTemplate::new(200).set_body_string(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -100,7 +101,7 @@ mod tests {
 
         // Mock UploadPart response with specific ETag
         Mock::given(method("PUT"))
-            .and(path("/test-key.bin"))
+            .and(path("/test-bucket/test-key.bin"))
             .and(query_param("uploadId", "upload-123"))
             .and(query_param("partNumber", "1"))
             .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"part-etag-abc123\""))
@@ -132,7 +133,7 @@ mod tests {
 
         // Mock CreateMultipartUpload
         Mock::given(method("POST"))
-            .and(path("/large-file.bin"))
+            .and(path("/test-bucket/large-file.bin"))
             .and(query_param("uploads", ""))
             .respond_with(ResponseTemplate::new(200).set_body_string(
                 r#"<InitiateMultipartUploadResult><UploadId>multi-upload</UploadId></InitiateMultipartUploadResult>"#,
@@ -142,7 +143,7 @@ mod tests {
 
         // Mock UploadPart for part 1
         Mock::given(method("PUT"))
-            .and(path("/large-file.bin"))
+            .and(path("/test-bucket/large-file.bin"))
             .and(query_param("uploadId", "multi-upload"))
             .and(query_param("partNumber", "1"))
             .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"etag-part-1\""))
@@ -151,7 +152,7 @@ mod tests {
 
         // Mock UploadPart for part 2
         Mock::given(method("PUT"))
-            .and(path("/large-file.bin"))
+            .and(path("/test-bucket/large-file.bin"))
             .and(query_param("uploadId", "multi-upload"))
             .and(query_param("partNumber", "2"))
             .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"etag-part-2\""))
@@ -189,7 +190,7 @@ mod tests {
 
         // Mock CreateMultipartUpload
         Mock::given(method("POST"))
-            .and(path("/complete-test.bin"))
+            .and(path("/test-bucket/complete-test.bin"))
             .and(query_param("uploads", ""))
             .respond_with(ResponseTemplate::new(200).set_body_string(
                 r#"<InitiateMultipartUploadResult><UploadId>complete-upload</UploadId></InitiateMultipartUploadResult>"#,
@@ -199,7 +200,7 @@ mod tests {
 
         // Mock UploadPart
         Mock::given(method("PUT"))
-            .and(path("/complete-test.bin"))
+            .and(path("/test-bucket/complete-test.bin"))
             .and(query_param("uploadId", "complete-upload"))
             .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"part-etag\""))
             .mount(&mock_server)
@@ -207,7 +208,7 @@ mod tests {
 
         // Mock CompleteMultipartUpload
         Mock::given(method("POST"))
-            .and(path("/complete-test.bin"))
+            .and(path("/test-bucket/complete-test.bin"))
             .and(query_param("uploadId", "complete-upload"))
             .and(body_string_contains("<CompleteMultipartUpload>"))
             .respond_with(ResponseTemplate::new(200).set_body_string(
@@ -255,7 +256,7 @@ mod tests {
 
         // Mock CreateMultipartUpload
         Mock::given(method("POST"))
-            .and(path("/abort-test.bin"))
+            .and(path("/test-bucket/abort-test.bin"))
             .and(query_param("uploads", ""))
             .respond_with(ResponseTemplate::new(200).set_body_string(
                 r#"<InitiateMultipartUploadResult><UploadId>abort-upload</UploadId></InitiateMultipartUploadResult>"#,
@@ -265,7 +266,7 @@ mod tests {
 
         // Mock AbortMultipartUpload (DELETE request)
         Mock::given(method("DELETE"))
-            .and(path("/abort-test.bin"))
+            .and(path("/test-bucket/abort-test.bin"))
             .and(query_param("uploadId", "abort-upload"))
             .respond_with(ResponseTemplate::new(204))
             .expect(1)
@@ -295,7 +296,7 @@ mod tests {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
-            .and(path("/error-test.bin"))
+            .and(path("/test-bucket/error-test.bin"))
             .and(query_param("uploads", ""))
             .respond_with(ResponseTemplate::new(403).set_body_string(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -323,7 +324,7 @@ mod tests {
 
         // Mock successful CreateMultipartUpload
         Mock::given(method("POST"))
-            .and(path("/part-error.bin"))
+            .and(path("/test-bucket/part-error.bin"))
             .and(query_param("uploads", ""))
             .respond_with(ResponseTemplate::new(200).set_body_string(
                 r#"<InitiateMultipartUploadResult><UploadId>part-error-upload</UploadId></InitiateMultipartUploadResult>"#,
@@ -333,7 +334,7 @@ mod tests {
 
         // Mock failing UploadPart
         Mock::given(method("PUT"))
-            .and(path("/part-error.bin"))
+            .and(path("/test-bucket/part-error.bin"))
             .and(query_param("uploadId", "part-error-upload"))
             .respond_with(
                 ResponseTemplate::new(500)
