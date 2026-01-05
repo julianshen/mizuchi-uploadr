@@ -28,17 +28,22 @@ Examples:
 """
 
 import argparse
-import hashlib
 import os
 import sys
 import time
-import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from typing import List, Optional, Tuple
-from urllib.parse import urljoin, quote
+
+try:
+    import defusedxml.ElementTree as ET
+except ImportError:
+    # Fallback to standard library with a warning
+    import xml.etree.ElementTree as ET
+    print("Warning: 'defusedxml' not installed. Using standard XML parser.", file=sys.stderr)
+    print("Install with: pip install defusedxml", file=sys.stderr)
 
 try:
     import requests
@@ -365,7 +370,9 @@ class MizuchiUploader:
                 f.seek(start)
                 data = f.read(part_size)
 
-            response = self.session.put(
+            # Use requests.put directly instead of session for thread safety
+            # requests.Session is not guaranteed to be thread-safe
+            response = requests.put(
                 url,
                 data=data,
                 headers={**self._get_headers(), 'Content-Length': str(part_size)},

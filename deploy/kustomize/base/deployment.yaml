@@ -19,9 +19,9 @@ spec:
       serviceAccountName: mizuchi-uploadr
       securityContext:
         runAsNonRoot: true
-        runAsUser: 65534
-        runAsGroup: 65534
-        fsGroup: 65534
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
         - name: mizuchi-uploadr
           image: ghcr.io/julianshen/mizuchi-uploadr:latest

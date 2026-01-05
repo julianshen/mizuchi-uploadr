@@ -127,8 +127,25 @@ use aws_sigv4::http_request::{
 };
 use aws_sigv4::sign::v4;
 use bytes::Bytes;
+use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use std::time::SystemTime;
 use thiserror::Error;
+
+/// Characters that must be percent-encoded in S3 object keys per RFC 3986.
+/// S3 allows alphanumeric, hyphen, underscore, period, and tilde unencoded.
+/// Forward slash '/' is preserved (not encoded) for path structure.
+const S3_KEY_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'_')
+    .remove(b'.')
+    .remove(b'~')
+    .remove(b'/');
+
+/// Percent-encode an S3 object key for use in URLs.
+/// Preserves '/' for path structure, encodes all other special characters.
+fn encode_s3_key(key: &str) -> String {
+    utf8_percent_encode(key, S3_KEY_ENCODE_SET).to_string()
+}
 
 /// S3 client errors
 #[derive(Error, Debug)]
@@ -491,7 +508,9 @@ impl S3Client {
         content_type: Option<&str>,
     ) -> Result<S3PutObjectResponse, S3ClientError> {
         // Build the request URL (path-style: /bucket/key)
-        let url = format!("{}/{}/{}", self.endpoint(), self.config.bucket, key);
+        // Encode the key to handle special characters per RFC 3986
+        let encoded_key = encode_s3_key(key);
+        let url = format!("{}/{}/{}", self.endpoint(), self.config.bucket, encoded_key);
 
         // Compute content hash for x-amz-content-sha256
         let content_hash = Self::compute_content_hash(&body);
@@ -648,7 +667,8 @@ impl S3Client {
         key: &str,
     ) -> Result<S3CreateMultipartUploadResponse, S3ClientError> {
         // Build the request URL with ?uploads query parameter (path-style: /bucket/key?uploads)
-        let url = format!("{}/{}/{}?uploads", self.endpoint(), self.config.bucket, key);
+        let encoded_key = encode_s3_key(key);
+        let url = format!("{}/{}/{}?uploads", self.endpoint(), self.config.bucket, encoded_key);
 
         // Build POST request with trace context
         let request = self.http_client.post(&url);
@@ -724,11 +744,12 @@ impl S3Client {
         body: Bytes,
     ) -> Result<S3UploadPartResponse, S3ClientError> {
         // Build the request URL with query parameters (path-style: /bucket/key?...)
+        let encoded_key = encode_s3_key(key);
         let url = format!(
             "{}/{}/{}?partNumber={}&uploadId={}",
             self.endpoint(),
             self.config.bucket,
-            key,
+            encoded_key,
             part_number,
             upload_id
         );
@@ -803,11 +824,12 @@ impl S3Client {
         parts: Vec<S3CompletedPart>,
     ) -> Result<S3CompleteMultipartUploadResponse, S3ClientError> {
         // Build the request URL with uploadId query parameter (path-style: /bucket/key?...)
+        let encoded_key = encode_s3_key(key);
         let url = format!(
             "{}/{}/{}?uploadId={}",
             self.endpoint(),
             self.config.bucket,
-            key,
+            encoded_key,
             upload_id
         );
 
@@ -897,11 +919,12 @@ impl S3Client {
         upload_id: &str,
     ) -> Result<(), S3ClientError> {
         // Build the request URL with uploadId query parameter (path-style: /bucket/key?...)
+        let encoded_key = encode_s3_key(key);
         let url = format!(
             "{}/{}/{}?uploadId={}",
             self.endpoint(),
             self.config.bucket,
-            key,
+            encoded_key,
             upload_id
         );
 
@@ -1030,7 +1053,9 @@ impl S3Client {
         crate::metrics::record_data_transfer(temp_file.size(), 0.0, temp_file.supports_zero_copy());
 
         // Build the request URL (path-style: /bucket/key)
-        let url = format!("{}/{}/{}", self.endpoint(), self.config.bucket, key);
+        // Encode the key to handle special characters per RFC 3986
+        let encoded_key = encode_s3_key(key);
+        let url = format!("{}/{}/{}", self.endpoint(), self.config.bucket, encoded_key);
 
         // Build headers list for signing (including pre-computed content hash)
         let mut headers = vec![

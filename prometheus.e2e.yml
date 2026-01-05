@@ -1,0 +1,18 @@
+# Prometheus Configuration for Mizuchi Uploadr E2E Tests
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'mizuchi-uploadr'
+    static_configs:
+      - targets: ['mizuchi:9090']
+    metrics_path: /metrics
+
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['minio:9000']
+    # Note: MinIO metrics endpoint may require authentication
+    # Set MINIO_PROMETHEUS_AUTH_TYPE=public in MinIO env to enable
+    metrics_path: /minio/v2/metrics/cluster

@@ -59,9 +59,9 @@ RUN apt-get update && \
         ca-certificates \
         curl && \
     # Install OpenSSL - try libssl3 first, fall back to libssl3t64
-    (apt-get install -y --no-install-recommends libssl3 2>/dev/null || \
-     apt-get install -y --no-install-recommends libssl3t64 2>/dev/null || \
-     true) && \
+    # Note: Must fail if neither package is available (required for TLS)
+    (apt-get install -y --no-install-recommends libssl3 || \
+     apt-get install -y --no-install-recommends libssl3t64) && \
     rm -rf /var/lib/apt/lists/* && \
     # Create non-root user (use UID 10001 to avoid conflicts with nobody/65534)
     useradd -r -s /bin/false -u 10001 mizuchi && \

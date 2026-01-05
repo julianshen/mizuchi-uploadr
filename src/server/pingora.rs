@@ -51,7 +51,6 @@ use crate::auth::{AuthError, AuthRequest, Authenticator};
 use crate::config::{BucketConfig, Config};
 use crate::s3::{S3Client, S3ClientConfig};
 use crate::server::ServerError;
-use bytes::Bytes;
 use http_body_util::BodyExt;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -341,7 +340,40 @@ async fn handle_request(
                     }
                 };
 
-                let authenticator = JwtAuthenticator::new_hs256(secret);
+                // Create JWT authenticator based on configured algorithm
+                let authenticator = match jwt_config.algorithm.to_uppercase().as_str() {
+                    "HS256" => JwtAuthenticator::new_hs256(secret),
+                    "RS256" => match JwtAuthenticator::new_rs256(secret) {
+                        Ok(auth) => auth,
+                        Err(e) => {
+                            error!("Failed to create RS256 authenticator: {}", e);
+                            return Ok(Response::builder()
+                                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                .header("Content-Type", "text/plain")
+                                .body("Server configuration error".to_string())
+                                .expect("Failed to build error response"));
+                        }
+                    },
+                    "ES256" => match JwtAuthenticator::new_es256(secret) {
+                        Ok(auth) => auth,
+                        Err(e) => {
+                            error!("Failed to create ES256 authenticator: {}", e);
+                            return Ok(Response::builder()
+                                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                .header("Content-Type", "text/plain")
+                                .body("Server configuration error".to_string())
+                                .expect("Failed to build error response"));
+                        }
+                    },
+                    alg => {
+                        error!("Unsupported JWT algorithm configured: {}", alg);
+                        return Ok(Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .header("Content-Type", "text/plain")
+                            .body("Server configuration error".to_string())
+                            .expect("Failed to build error response"));
+                    }
+                };
                 let auth_request = build_auth_request(&req);
 
                 match authenticator.authenticate(&auth_request).await {
@@ -466,7 +498,7 @@ async fn handle_request(
         match s3_client
             .put_object(
                 s3_key,
-                Bytes::from(body_bytes.to_vec()),
+                body_bytes,
                 content_type.as_deref(),
             )
             .await

@@ -85,6 +85,7 @@ check_tool() {
 
 check_tool openssl
 check_tool base64
+check_tool jq
 
 # Base64URL encode function (differs from standard base64)
 base64url_encode() {
@@ -99,18 +100,17 @@ EXP=$((NOW + EXPIRY_HOURS * 3600))
 # Build header (always HS256)
 HEADER='{"alg":"HS256","typ":"JWT"}'
 
-# Build payload with optional claims
-PAYLOAD="{\"sub\":\"${SUBJECT}\",\"iat\":${NOW},\"exp\":${EXP}"
-
-if [[ -n "$ISSUER" ]]; then
-    PAYLOAD="${PAYLOAD},\"iss\":\"${ISSUER}\""
-fi
-
-if [[ -n "$AUDIENCE" ]]; then
-    PAYLOAD="${PAYLOAD},\"aud\":\"${AUDIENCE}\""
-fi
-
-PAYLOAD="${PAYLOAD}}"
+# Build payload with optional claims using jq for safe JSON construction
+# This prevents injection attacks from special characters in input values
+PAYLOAD=$(jq -c -n \
+  --arg sub "$SUBJECT" \
+  --argjson iat "$NOW" \
+  --argjson exp "$EXP" \
+  --arg iss "$ISSUER" \
+  --arg aud "$AUDIENCE" \
+  '{sub: $sub, iat: $iat, exp: $exp}
+   | if $iss | length > 0 then .iss = $iss else . end
+   | if $aud | length > 0 then .aud = $aud else . end')
 
 # Encode header and payload
 HEADER_B64=$(echo -n "$HEADER" | base64url_encode)

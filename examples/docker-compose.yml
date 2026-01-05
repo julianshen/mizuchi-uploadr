@@ -13,26 +13,28 @@ version: "3.8"
 services:
   # MinIO - S3-compatible object storage (always starts)
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
     container_name: mizuchi-minio
     ports:
       - "9000:9000"   # S3 API
       - "9001:9001"   # Web Console
     environment:
+      # WARNING: Change credentials in production!
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Use curl instead of mc (mc is not included in minio server image)
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   # Create default bucket on startup (always runs)
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2024-05-09T17-04-24Z
     container_name: mizuchi-minio-init
     depends_on:
       minio:
@@ -83,7 +85,7 @@ services:
 
   # Prometheus (optional - for metrics collection)
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.51.2
     container_name: mizuchi-prometheus
     profiles:
       - monitoring
@@ -100,13 +102,14 @@ services:
 
   # Grafana (optional - for metrics visualization)
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.2
     container_name: mizuchi-grafana
     profiles:
       - monitoring
     ports:
       - "3000:3000"
     environment:
+      # WARNING: Change credentials in production!
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
