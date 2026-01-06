@@ -88,7 +88,7 @@ nix = {version = "0.30", features = ["fs", "uio", "zerocopy"]}
 # Testing
 assert_cmd = "2.0"
 criterion = {version = "0.5", features = ["async_tokio"]}
-mockall = "0.12"
+mockall = "0.14"
 predicates = "3.0"
 tempfile = "3.9"
 tokio-test = "0.4"
